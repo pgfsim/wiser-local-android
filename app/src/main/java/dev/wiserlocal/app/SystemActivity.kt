@@ -13,6 +13,9 @@ class SystemActivity : Activity() {
 
     private val io = Executors.newSingleThreadExecutor()
 
+    /** Device currently flashing because of Identify, if any. */
+    private var identifying: Int? = null
+
     private lateinit var rows: Rows
     private lateinit var status: TextView
 
@@ -37,6 +40,7 @@ class SystemActivity : Activity() {
     }
 
     override fun onDestroy() {
+        stopIdentify()
         io.shutdown()
         super.onDestroy()
     }
@@ -143,11 +147,15 @@ class SystemActivity : Activity() {
                     },
                     device.signal?.let { getString(R.string.device_signal, spaced(it)) },
                     device.firmware?.let { getString(R.string.device_firmware, it) },
-                    device.locked?.let { getString(if (it) R.string.device_locked else R.string.device_unlocked) },
-                    if (device.type != "Controller") getString(R.string.tap_for_actions) else null,
+                    if (device.type != "Controller") getString(R.string.tap_to_identify) else null,
                 )
-                val onClick = if (device.type != "Controller") ({ deviceActions(device, name) }) else null
+                val onClick = if (device.type != "Controller") ({ identify(device, name) }) else null
                 rows.info(name, details.joinToString("\n").ifEmpty { null }, onClick)
+                device.locked?.let { locked ->
+                    rows.toggle(getString(R.string.device_lock), getString(R.string.device_lock_help, name), locked) { on ->
+                        load { it.setDeviceLock(device.id, on) }
+                    }
+                }
             }
             rows.info(getString(R.string.add_device), getString(R.string.add_device_help)) {
                 confirm(getString(R.string.add_device_confirm), R.string.add_device_start) {
@@ -163,7 +171,14 @@ class SystemActivity : Activity() {
             system.cloudConnected?.let { getString(if (it) R.string.connected_yes else R.string.connected_no) },
         )
         loaded.network.forEach { (label, value) -> rows.info(label, value) }
-        rows.info(getString(R.string.sys_fuel), system.fuelType)
+        system.boiler.forEach { (key, value) ->
+            val shown = when (value) {
+                "true" -> getString(R.string.yes)
+                "false" -> getString(R.string.no)
+                else -> spaced(value)
+            }
+            rows.info(spaced(key), shown)
+        }
         rows.info(getString(R.string.sys_brand), system.brand)
         rows.info(getString(R.string.sys_opentherm), system.openTherm)
 
@@ -190,21 +205,48 @@ class SystemActivity : Activity() {
         }
     }
 
-    private fun deviceActions(device: Device, name: String) {
-        val actions = mutableListOf<Pair<String, () -> Unit>>()
-        actions += getString(R.string.device_identify) to {
-            load(toast = R.string.device_identify_started) { it.identifyDevice(device.id) }
-        }
-        device.locked?.let { locked ->
-            actions += getString(if (locked) R.string.device_unlock else R.string.device_lock) to {
-                load { it.setDeviceLock(device.id, !locked) }
+    /**
+     * Makes the device flash until the dialog is closed, like the official app.
+     * The stop is also sent if the screen is left while it is still flashing.
+     */
+    private fun identify(device: Device, name: String) {
+        val hub = Prefs(this).hub()
+        io.execute {
+            val error = try {
+                hub.identifyDevice(device.id, true)
+                null
+            } catch (e: Exception) {
+                e
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                if (error != null) {
+                    status.text = getString(R.string.error, error.message ?: error.javaClass.simpleName)
+                    return@runOnUiThread
+                }
+                identifying = device.id
+                AlertDialog.Builder(this)
+                    .setTitle(name)
+                    .setMessage(R.string.device_identifying)
+                    .setPositiveButton(R.string.done, null)
+                    .setOnDismissListener { stopIdentify() }
+                    .show()
             }
         }
-        AlertDialog.Builder(this)
-            .setTitle(name)
-            .setItems(actions.map { it.first }.toTypedArray()) { _, which -> actions[which].second() }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+    }
+
+    private fun stopIdentify() {
+        val deviceId = identifying ?: return
+        identifying = null
+        if (io.isShutdown) return
+        val hub = Prefs(this).hub()
+        io.execute {
+            try {
+                hub.identifyDevice(deviceId, false)
+            } catch (e: Exception) {
+                // Nothing useful to do; the device stops flashing by itself after a while.
+            }
+        }
     }
 
     private fun deviceLabel(type: String): String = when (type) {

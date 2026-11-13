@@ -17,7 +17,8 @@ account involved.
   Eco and Comfort mode, valve protection, open window detection per room,
   battery, signal and button lock for each device, identify a device, add a
   new device, hub firmware, cloud and Wi-Fi details, the boiler fuel type set
-  on the hub, hub clock settings, and boiler readings when the hub is wired
+  on the hub (and any other boiler setting it reports), hub clock settings,
+  and boiler readings when the hub is wired
   over OpenTherm.
 - **Rooms and schedules screen:** add, rename and delete rooms and heating
   schedules, copy one schedule over another, and choose which schedule a room
@@ -86,7 +87,7 @@ in tenths of a degree.
 | Away settings | `PATCH System` `{"AwayModeSetPointLimit":160}` / `{"AwayModeAffectsHotWater":"true"}` |
 | Valve protection / clock | `PATCH System` `{"ValveProtectionEnabled":true}` / `{"AutomaticDaylightSaving":"true"}` / `{"TimeZoneOffset":0}` |
 | Add a device | `PATCH System/RequestPermitJoin` `120` |
-| Lock / identify device | `PATCH Device/{id}` `{"DeviceLockEnabled":true}` / `{"Identify":true}` |
+| Lock / identify device | `PATCH Device/{id}` `{"DeviceLockEnabled":true}` / `{"Identify":true}` (`false` to stop) |
 | Hub Wi-Fi details | `GET /data/v2/network/` |
 | Boiler readings | `GET /data/v2/opentherm/` |
 | Rename / delete schedule | `PATCH` or `DELETE /data/v2/schedules/Heating/{id}` (`{"Name":"Weekend"}`) |

@@ -61,8 +61,11 @@ data class SystemInfo(
     val comfortMode: Boolean?,
     val cloudConnected: Boolean?,
     val firmware: String?,
-    /** Boiler fuel type as set on the hub, if it reports one. */
-    val fuelType: String?,
+    /**
+     * Heat source and boiler settings as (hub field name, value) pairs, e.g.
+     * "FuelType" to "Gas". Shown as reported, since the field names are undocumented.
+     */
+    val boiler: List<Pair<String, String>>,
     val brand: String?,
     /** OpenTherm link status, e.g. "Connected" or "Disconnected". */
     val openTherm: String?,
@@ -203,7 +206,7 @@ class WiserHub(host: String, private val secret: String) {
             comfortMode = sys.optBooleanOrNull("ComfortModeEnabled"),
             cloudConnected = sys.optStringOrNull("CloudConnectionStatus")?.let { it == "Connected" },
             firmware = sys.optStringOrNull("ActiveSystemVersion"),
-            fuelType = sys.optJSONObject("BoilerSettings")?.optStringOrNull("FuelType"),
+            boiler = boilerSettings(sys),
             brand = sys.optStringOrNull("BrandName"),
             openTherm = sys.optStringOrNull("OpenThermConnectionStatus"),
             awayTempC = if (sys.has("AwayModeSetPointLimit")) fromHub(sys.optInt("AwayModeSetPointLimit")) else null,
@@ -355,8 +358,8 @@ class WiserHub(host: String, private val secret: String) {
     fun setDeviceLock(deviceId: Int, locked: Boolean) =
         patch("Device/$deviceId", """{"DeviceLockEnabled":$locked}""")
 
-    /** Makes the device flash so it can be told apart from others. */
-    fun identifyDevice(deviceId: Int) = patch("Device/$deviceId", """{"Identify":true}""")
+    /** Starts or stops the device flashing so it can be told apart from others. */
+    fun identifyDevice(deviceId: Int, on: Boolean) = patch("Device/$deviceId", """{"Identify":$on}""")
 
     /** The hub's Wi-Fi details as (label, value) pairs; empty if it does not report them. */
     fun fetchNetwork(): List<Pair<String, String>> {
@@ -629,6 +632,26 @@ class WiserHub(host: String, private val secret: String) {
 
         /** Hub values are tenths of a degree; out-of-range values mean "no reading". */
         private fun fromHub(raw: Int): Double? = if (raw in -400..1999) raw / 10.0 else null
+
+        private val BOILER_KEY = Regex("HeatSource|Boiler|Fuel|HydronicChannel|HotWaterChannel")
+
+        /**
+         * Everything in the hub's "BoilerSettings" block, plus any other simple
+         * system setting whose name looks boiler related.
+         */
+        private fun boilerSettings(sys: JSONObject): List<Pair<String, String>> {
+            val out = mutableListOf<Pair<String, String>>()
+            fun collect(source: JSONObject, filter: Boolean) {
+                for (key in source.keys()) {
+                    if (filter && !BOILER_KEY.containsMatchIn(key)) continue
+                    val value = source.opt(key)
+                    if (value is String || value is Number || value is Boolean) out += key to value.toString()
+                }
+            }
+            sys.optJSONObject("BoilerSettings")?.let { collect(it, filter = false) }
+            collect(sys, filter = true)
+            return out
+        }
 
         private fun fromHhmm(hhmm: Int): Int = (hhmm / 100) * 60 + hhmm % 100
         private fun toHhmm(minutes: Int): Int = (minutes / 60) * 100 + minutes % 60

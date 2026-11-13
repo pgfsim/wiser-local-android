@@ -55,7 +55,6 @@
     <string name="sys_hub">Hub</string>
     <string name="sys_firmware">Firmware</string>
     <string name="sys_cloud">Cloud connection</string>
-    <string name="sys_fuel">Boiler fuel type</string>
     <string name="sys_brand">Brand</string>
     <string name="sys_opentherm">OpenTherm link to boiler</string>
     <string name="sys_devices">Devices</string>
@@ -84,7 +83,7 @@
     <string name="cancel_all">Cancel overrides</string>
 
     <string name="tap_to_change">%1$s · tap to change</string>
-    <string name="tap_for_actions">Tap for actions</string>
+    <string name="tap_to_identify">Tap to identify</string>
     <string name="away_temp">Away temperature</string>
     <string name="away_hot_water">Away mode turns off hot water</string>
     <string name="away_hot_water_help">When on, hot water is also switched off while away mode is on.</string>
@@ -95,12 +94,12 @@
     <string name="daylight_saving_help">The hub moves its clock for summer time by itself.</string>
     <string name="time_zone">Time zone offset</string>
     <string name="time_zone_prompt">Offset from UTC in minutes (0 for the UK)</string>
-    <string name="device_locked">Buttons locked</string>
-    <string name="device_unlocked">Buttons unlocked</string>
-    <string name="device_lock">Lock buttons</string>
-    <string name="device_unlock">Unlock buttons</string>
-    <string name="device_identify">Identify (make it flash)</string>
-    <string name="device_identify_started">Asked the device to flash</string>
+    <string name="device_lock">Device lock</string>
+    <string name="device_lock_help">Locks the physical controls on %1$s.</string>
+    <string name="device_identifying">The device is flashing so you can find it. Tap Done to stop.</string>
+    <string name="done">Done</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
     <string name="add_device">Add a device</string>
     <string name="add_device_help">Lets a new thermostat or radiator valve join the hub.</string>
     <string name="add_device_confirm">Open the hub for new devices for two minutes? Put the new device into pairing mode straight after.</string>
