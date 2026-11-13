@@ -23,6 +23,25 @@
     <string name="boost_for">Boost %1$d min</string>
     <string name="cancel_boost">Cancel boost</string>
 
+    <string name="schedule">Schedule</string>
+    <string name="edit_schedule">Edit schedule</string>
+    <string name="schedule_title">%1$s schedule</string>
+    <string name="save">Save</string>
+    <string name="add_time">Add time</string>
+    <string name="copy_day">Copy day to…</string>
+    <string name="copy_day_title">Copy %1$s to</string>
+    <string name="remove_time">Remove this time</string>
+    <string name="target_temperature">Target temperature</string>
+    <string name="schedule_hint_heating">Each time sets the target until the next one. Tap a time or temperature to change it.</string>
+    <string name="schedule_hint_onoff">Each time switches on or off until the next one. Tap to change.</string>
+    <string name="schedule_empty">Nothing set for this day, so the last setting from the day before carries on.</string>
+    <string name="unsaved_changes">Unsaved changes. Tap Save to send them to the hub.</string>
+    <string name="schedule_saved">Schedule saved</string>
+    <string name="schedule_missing">The hub has no schedule for this</string>
+    <string name="discard_changes">Discard your unsaved changes?</string>
+    <string name="discard">Discard</string>
+    <string name="keep_editing">Keep editing</string>
+
     <string name="hub_address">Hub IP address</string>
     <string name="hub_address_hint" translatable="false">192.168.1.50</string>
     <string name="hub_secret">Hub secret</string>

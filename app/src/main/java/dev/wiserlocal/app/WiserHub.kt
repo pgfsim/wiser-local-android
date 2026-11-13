@@ -1,5 +1,6 @@
 package dev.wiserlocal.app
 
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -12,6 +13,7 @@ import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.X509TrustManager
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 data class Room(
@@ -23,6 +25,8 @@ data class Room(
     val setPointC: Double?,
     val heating: Boolean,
     val overridden: Boolean,
+    /** Schedule this room follows, or 0 if none. */
+    val scheduleId: Int,
 )
 
 data class HotWater(
@@ -31,20 +35,40 @@ data class HotWater(
     val boosted: Boolean,
     /** When the current override ends (epoch millis), or 0 if there is none. */
     val overrideUntilMs: Long,
+    /** Schedule the hot water follows, or 0 if none. */
+    val scheduleId: Int,
 )
 
 data class HubState(val rooms: List<Room>, val hotWater: HotWater?)
 
 /**
+ * One change point in a day. [value] is the target in tenths of a degree for a
+ * heating schedule ([WiserHub.SCHEDULE_OFF] for off), or 1/0 for an on/off schedule.
+ */
+data class Slot(val minutes: Int, val value: Int)
+
+data class Schedule(
+    val id: Int,
+    val name: String,
+    /** True for a room heating schedule, false for an on/off (hot water) schedule. */
+    val heating: Boolean,
+    /** Slots per day, keyed by the names in [WiserHub.DAYS], sorted by time. */
+    val days: Map<String, List<Slot>>,
+    /** How the hub sent on/off days, so they are sent back in the same shape. */
+    val onOffWrapped: Boolean = false,
+)
+
+/**
  * Minimal client for the Wiser hub's unofficial local REST API.
  * All calls block, so run them off the main thread.
  *
- * Payloads follow https://github.com/msp1974/wiserheatapiv2. The hub works in
- * tenths of a degree, so 20.5°C is sent as 205.
+ * Payloads follow https://github.com/msp1974/aioWiserHeatAPI. The hub works in
+ * tenths of a degree, so 20.5°C is sent as 205, and schedule times are HHMM
+ * integers, so 06:30 is sent as 630.
  */
 class WiserHub(host: String, private val secret: String) {
 
-    private val host = host.trim().removePrefix("http://").trimEnd('/')
+    private val host = host.trim().removePrefix("http://").removePrefix("https://").trimEnd('/')
 
     fun fetch(): HubState {
         val json = JSONObject(request("GET", "", null))
@@ -63,6 +87,7 @@ class WiserHub(host: String, private val secret: String) {
                     heating = o.optString("ControlOutputState") == "On" ||
                         o.optInt("PercentageDemand", 0) > 0,
                     overridden = o.optString("OverrideType", "None") != "None",
+                    scheduleId = o.optInt("ScheduleId", 0),
                 )
             }
         }
@@ -76,6 +101,7 @@ class WiserHub(host: String, private val secret: String) {
                 on = on,
                 boosted = o.optString("HotWaterDescription").contains("Boost") || (timedOverride && on),
                 overrideUntilMs = if (until > now) until else 0,
+                scheduleId = o.optInt("ScheduleId", 0),
             )
         }
 
@@ -98,6 +124,85 @@ class WiserHub(host: String, private val secret: String) {
 
     fun cancelHotWaterBoost(hotWaterId: Int) =
         patch("HotWater/$hotWaterId", """{"RequestOverride":{"Type":"None"}}""")
+
+    /** All heating and on/off schedules on the hub. Needs firmware with the v2 API. */
+    fun fetchSchedules(): List<Schedule> {
+        val text = attempt("GET", SCHEDULES_PATH, null)
+            ?: throw IOException("This hub's firmware does not offer schedules over the local API")
+        val json = JSONObject(text)
+        val schedules = mutableListOf<Schedule>()
+        for ((key, heating) in listOf("Heating" to true, "OnOff" to false)) {
+            val arr = json.optJSONArray(key) ?: continue
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                var wrapped = false
+                val days = DAYS.associateWith { day ->
+                    val slots = mutableListOf<Slot>()
+                    if (heating) {
+                        // {"Time": [630, 830], "DegreesC": [200, 160]}
+                        val d = o.optJSONObject(day)
+                        val times = d?.optJSONArray("Time")
+                        val temps = d?.optJSONArray("DegreesC")
+                        if (times != null && temps != null) {
+                            for (j in 0 until minOf(times.length(), temps.length())) {
+                                slots += Slot(fromHhmm(times.getInt(j)), temps.getInt(j))
+                            }
+                        }
+                    } else {
+                        // [630, -830]: positive turns on, negative turns off.
+                        val list = when (val raw = o.opt(day)) {
+                            is JSONArray -> raw
+                            is JSONObject -> {
+                                wrapped = true
+                                raw.optJSONArray("Time")
+                            }
+                            else -> null
+                        }
+                        if (list != null) {
+                            for (j in 0 until list.length()) {
+                                val v = list.getInt(j)
+                                val time = abs(v)
+                                // "Off at midnight" cannot be -0, so the hub uses -2400.
+                                slots += Slot(fromHhmm(if (time >= 2400) 0 else time), if (v < 0) 0 else 1)
+                            }
+                        }
+                    }
+                    slots.sortedBy { it.minutes }
+                }
+                schedules += Schedule(o.getInt("id"), o.optString("Name"), heating, days, wrapped)
+            }
+        }
+        return schedules
+    }
+
+    /** Replaces all seven days of [schedule] on the hub. */
+    fun saveSchedule(schedule: Schedule) {
+        val body = JSONObject()
+        for (day in DAYS) {
+            val slots = schedule.days[day].orEmpty().sortedBy { it.minutes }
+            if (schedule.heating) {
+                body.put(
+                    day,
+                    JSONObject()
+                        .put("Time", JSONArray(slots.map { toHhmm(it.minutes) }))
+                        .put("DegreesC", JSONArray(slots.map { it.value })),
+                )
+            } else {
+                val times = JSONArray(slots.map {
+                    val time = toHhmm(it.minutes)
+                    when {
+                        it.value != 0 -> time
+                        time == 0 -> -2400
+                        else -> -time
+                    }
+                })
+                body.put(day, if (schedule.onOffWrapped) JSONObject().put("Time", times) else times)
+            }
+        }
+        val type = if (schedule.heating) "Heating" else "OnOff"
+        attempt("PATCH", "$SCHEDULES_PATH$type/${schedule.id}", body.toString())
+            ?: throw IOException("The hub did not recognise that schedule")
+    }
 
     private fun patch(path: String, body: String) {
         request("PATCH", path, body)
@@ -160,7 +265,14 @@ class WiserHub(host: String, private val secret: String) {
         const val MIN_TEMP_C = 5.0
         const val MAX_TEMP_C = 30.0
 
+        /** Heating schedule value meaning "off" (-20°C in tenths). */
+        const val SCHEDULE_OFF = -200
+
+        /** Day names exactly as the hub's schedule API spells them. */
+        val DAYS = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
         private val BASE_PATHS = listOf("/data/v2/domain/", "/data/domain/")
+        private const val SCHEDULES_PATH = "/data/v2/schedules/"
         private const val HOT_WATER_ON = 1100
         private const val NO_READING = -32768
 
@@ -184,6 +296,9 @@ class WiserHub(host: String, private val secret: String) {
 
         /** Hub values are tenths of a degree; out-of-range values mean "no reading". */
         private fun fromHub(raw: Int): Double? = if (raw in -400..1999) raw / 10.0 else null
+
+        private fun fromHhmm(hhmm: Int): Int = (hhmm / 100) * 60 + hhmm % 100
+        private fun toHhmm(minutes: Int): Int = (minutes / 60) * 100 + minutes % 60
 
         fun formatTemp(c: Double?): String =
             if (c == null) "--" else String.format(Locale.getDefault(), "%.1f°", c)

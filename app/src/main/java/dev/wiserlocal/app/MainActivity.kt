@@ -122,8 +122,12 @@ class MainActivity : Activity() {
         row.findViewById<Button>(R.id.room_up).setOnClickListener { nudge(0.5) }
 
         row.findViewById<Button>(R.id.room_schedule).apply {
-            visibility = if (room.overridden) View.VISIBLE else View.INVISIBLE
+            visibility = if (room.overridden) View.VISIBLE else View.GONE
             setOnClickListener { withHub { it.resumeRoomSchedule(room.id) } }
+        }
+        row.findViewById<Button>(R.id.room_edit_schedule).apply {
+            visibility = if (room.scheduleId > 0) View.VISIBLE else View.GONE
+            setOnClickListener { openSchedule(room.scheduleId, heating = true, name = room.name) }
         }
         list.addView(row)
     }
@@ -149,6 +153,21 @@ class MainActivity : Activity() {
                 setOnClickListener { withHub { it.boostHotWater(hw.id, minutes) } }
             }
         }
+        row.findViewById<Button>(R.id.hw_edit_schedule).apply {
+            visibility = if (hw.scheduleId > 0) View.VISIBLE else View.GONE
+            setOnClickListener {
+                openSchedule(hw.scheduleId, heating = false, name = getString(R.string.hot_water))
+            }
+        }
         list.addView(row)
+    }
+
+    private fun openSchedule(scheduleId: Int, heating: Boolean, name: String) {
+        startActivity(
+            Intent(this, ScheduleActivity::class.java)
+                .putExtra(ScheduleActivity.EXTRA_ID, scheduleId)
+                .putExtra(ScheduleActivity.EXTRA_HEATING, heating)
+                .putExtra(ScheduleActivity.EXTRA_TITLE, getString(R.string.schedule_title, name))
+        )
     }
 }

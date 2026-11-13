@@ -5,7 +5,8 @@ to the hub over your home network using the hub's local REST API, with no cloud
 account involved.
 
 - **App:** room temperatures, target temperature up/down in 0.5° steps, resume
-  schedule, and hot water boost.
+  schedule, hot water boost, and a weekly schedule editor for each room and
+  for hot water.
 - **Home screen widget:** current and target temperature for one room.
 - **Quick settings tile:** start or cancel a hot water boost.
 
@@ -57,6 +58,13 @@ in tenths of a degree.
 | Resume schedule | `PATCH Room/{id}` `{"RequestOverride":{"Type":"None"}}` |
 | Boost hot water | `PATCH HotWater/{id}` `{"RequestOverride":{"Type":"Manual","DurationMinutes":60,"SetPoint":1100}}` |
 | Cancel boost | `PATCH HotWater/{id}` `{"RequestOverride":{"Type":"None"}}` |
+| Read schedules | `GET /data/v2/schedules/` |
+| Save room schedule | `PATCH /data/v2/schedules/Heating/{id}` `{"Monday":{"Time":[630,830],"DegreesC":[200,160]}, ...}` |
+| Save hot water schedule | `PATCH /data/v2/schedules/OnOff/{id}` `{"Monday":[630,-830], ...}` |
+
+Schedule times are `HHMM` integers (`630` is 06:30). In a heating schedule
+`-200` means off. In an on/off schedule a positive time switches on, a negative
+time switches off, and off at midnight is `-2400`.
 
 The payloads follow [msp1974/wiserheatapiv2](https://github.com/msp1974/wiserheatapiv2),
 the library behind the Home Assistant integration.
@@ -75,4 +83,8 @@ and `org.json`.
   protection against someone already on your home network.
 - `targetSdk` is held at 35. Raising it needs the newer local-network permission
   and edge-to-edge layout handling.
-- No schedule editing, away mode or per-device details yet.
+- Schedule editing needs firmware with the `/data/v2/` API, and is limited to
+  eight changes a day.
+- The hub keeps no history and does not say what kind of boiler it controls,
+  so there are no graphs or system-type details.
+- No away mode or per-device details yet.

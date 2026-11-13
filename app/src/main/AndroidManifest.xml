@@ -28,6 +28,12 @@
             android:label="@string/settings"
             android:parentActivityName=".MainActivity" />
 
+        <activity
+            android:name=".ScheduleActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:exported="false"
+            android:parentActivityName=".MainActivity" />
+
         <receiver
             android:name=".TempWidgetProvider"
             android:exported="true"
