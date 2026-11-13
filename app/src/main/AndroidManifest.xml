@@ -34,6 +34,12 @@
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
+        <activity
+            android:name=".SystemActivity"
+            android:exported="false"
+            android:label="@string/system"
+            android:parentActivityName=".MainActivity" />
+
         <receiver
             android:name=".TempWidgetProvider"
             android:exported="true"
@@ -51,6 +57,20 @@
             android:exported="true"
             android:icon="@drawable/ic_water"
             android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.TOGGLEABLE_TILE"
+                android:value="true" />
+        </service>
+
+        <service
+            android:name=".AwayTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_away"
+            android:label="@string/away_mode"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />

@@ -27,6 +27,18 @@ data class Room(
     val overridden: Boolean,
     /** Schedule this room follows, or 0 if none. */
     val scheduleId: Int,
+    /** "Auto" (following the schedule) or "Manual". */
+    val mode: String,
+    val boosted: Boolean,
+    /** When the current override ends (epoch millis), or 0 if open-ended. */
+    val overrideUntilMs: Long,
+    /** How hard the room is calling for heat, 0 to 100. */
+    val demandPercent: Int,
+    /** Relative humidity from the room thermostat, if the room has one. */
+    val humidity: Int?,
+    val windowOpen: Boolean,
+    /** Whether open window detection is switched on, or null if unsupported. */
+    val windowDetection: Boolean?,
 )
 
 data class HotWater(
@@ -37,9 +49,43 @@ data class HotWater(
     val overrideUntilMs: Long,
     /** Schedule the hot water follows, or 0 if none. */
     val scheduleId: Int,
+    /** "Auto" (following the schedule) or "Manual". */
+    val mode: String,
 )
 
-data class HubState(val rooms: List<Room>, val hotWater: HotWater?)
+data class SystemInfo(
+    val away: Boolean,
+    /** True while the hub is calling the boiler for central heating. */
+    val boilerFiring: Boolean,
+    val ecoMode: Boolean?,
+    val comfortMode: Boolean?,
+    val cloudConnected: Boolean?,
+    val firmware: String?,
+    /** Boiler fuel type as set on the hub, if it reports one. */
+    val fuelType: String?,
+    val brand: String?,
+    /** OpenTherm link status, e.g. "Connected" or "Disconnected". */
+    val openTherm: String?,
+)
+
+data class Device(
+    val id: Int,
+    /** Hub product type, e.g. "RoomStat", "iTRV" or "Controller". */
+    val type: String,
+    val roomName: String?,
+    /** Battery level as the hub words it, e.g. "Normal" or "Low". */
+    val battery: String?,
+    val batteryVolts: Double?,
+    val signal: String?,
+    val firmware: String?,
+)
+
+data class HubState(
+    val rooms: List<Room>,
+    val hotWater: HotWater?,
+    val system: SystemInfo,
+    val devices: List<Device>,
+)
 
 /**
  * One change point in a day. [value] is the target in tenths of a degree for a
@@ -56,7 +102,13 @@ data class Schedule(
     val days: Map<String, List<Slot>>,
     /** How the hub sent on/off days, so they are sent back in the same shape. */
     val onOffWrapped: Boolean = false,
+    /** Value of the next scheduled change (same units as [Slot.value]), if known. */
+    val nextValue: Int? = null,
 )
+
+enum class RoomMode { AUTO, MANUAL, OFF }
+
+enum class HotWaterMode { AUTO, ON, OFF }
 
 /**
  * Minimal client for the Wiser hub's unofficial local REST API.
@@ -74,22 +126,41 @@ class WiserHub(host: String, private val secret: String) {
         val json = JSONObject(request("GET", "", null))
         val now = System.currentTimeMillis()
 
+        val roomStats = mutableMapOf<Int, JSONObject>()
+        json.optJSONArray("RoomStat").forEachObject { roomStats[it.optInt("id")] = it }
+
         val rooms = mutableListOf<Room>()
-        json.optJSONArray("Room")?.let { arr ->
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
-                val id = o.getInt("id")
-                rooms += Room(
-                    id = id,
-                    name = o.optString("Name", "Room $id"),
-                    tempC = fromHub(o.optInt("CalculatedTemperature", NO_READING)),
-                    setPointC = fromHub(o.optInt("CurrentSetPoint", NO_READING)),
-                    heating = o.optString("ControlOutputState") == "On" ||
-                        o.optInt("PercentageDemand", 0) > 0,
-                    overridden = o.optString("OverrideType", "None") != "None",
-                    scheduleId = o.optInt("ScheduleId", 0),
-                )
+        val deviceRooms = mutableMapOf<Int, String>()
+        json.optJSONArray("Room").forEachObject { o ->
+            val id = o.getInt("id")
+            val name = o.optString("Name", "Room $id")
+            val statId = o.optInt("RoomStatId", 0)
+            if (statId > 0) deviceRooms[statId] = name
+            for (key in listOf("SmartValveIds", "HeatingActuatorIds", "UfhRelayIds")) {
+                val ids = o.optJSONArray(key) ?: continue
+                for (i in 0 until ids.length()) deviceRooms[ids.optInt(i)] = name
             }
+            val origin = o.optString("SetpointOrigin", o.optString("SetPointOrigin"))
+            val overrideType = o.optString("OverrideType", "None")
+            val until = o.optLong("OverrideTimeoutUnixTime", 0) * 1000
+            rooms += Room(
+                id = id,
+                name = name,
+                tempC = fromHub(o.optInt("CalculatedTemperature", NO_READING)),
+                setPointC = fromHub(o.optInt("CurrentSetPoint", NO_READING)),
+                heating = o.optString("ControlOutputState") == "On" ||
+                    o.optInt("PercentageDemand", 0) > 0,
+                overridden = overrideType != "None",
+                scheduleId = o.optInt("ScheduleId", 0),
+                mode = o.optString("Mode", "Auto"),
+                boosted = overrideType == "Boost" || origin.contains("Boost"),
+                overrideUntilMs = if (until > now) until else 0,
+                demandPercent = o.optInt("PercentageDemand", 0),
+                humidity = roomStats[statId]?.takeIf { it.has("MeasuredHumidity") }
+                    ?.optInt("MeasuredHumidity")?.takeIf { it in 1..100 },
+                windowOpen = o.optString("WindowState") == "Open",
+                windowDetection = o.optBooleanOrNull("WindowDetectionActive"),
+            )
         }
 
         val hotWater = json.optJSONArray("HotWater")?.optJSONObject(0)?.let { o ->
@@ -102,10 +173,42 @@ class WiserHub(host: String, private val secret: String) {
                 boosted = o.optString("HotWaterDescription").contains("Boost") || (timedOverride && on),
                 overrideUntilMs = if (until > now) until else 0,
                 scheduleId = o.optInt("ScheduleId", 0),
+                mode = o.optString("Mode", "Auto"),
             )
         }
 
-        return HubState(rooms, hotWater)
+        val sys = json.optJSONObject("System") ?: JSONObject()
+        var relayOn: Boolean? = null
+        json.optJSONArray("HeatingChannel").forEachObject {
+            relayOn = (relayOn ?: false) || it.optString("HeatingRelayState") == "On"
+        }
+        val system = SystemInfo(
+            away = sys.optString("OverrideType") == "Away",
+            boilerFiring = relayOn ?: rooms.any { it.heating },
+            ecoMode = sys.optBooleanOrNull("EcoModeEnabled"),
+            comfortMode = sys.optBooleanOrNull("ComfortModeEnabled"),
+            cloudConnected = sys.optStringOrNull("CloudConnectionStatus")?.let { it == "Connected" },
+            firmware = sys.optStringOrNull("ActiveSystemVersion"),
+            fuelType = sys.optJSONObject("BoilerSettings")?.optStringOrNull("FuelType"),
+            brand = sys.optStringOrNull("BrandName"),
+            openTherm = sys.optStringOrNull("OpenThermConnectionStatus"),
+        )
+
+        val devices = mutableListOf<Device>()
+        json.optJSONArray("Device").forEachObject { o ->
+            val id = o.optInt("id")
+            devices += Device(
+                id = id,
+                type = o.optString("ProductType", "Device"),
+                roomName = deviceRooms[id],
+                battery = o.optStringOrNull("BatteryLevel"),
+                batteryVolts = if (o.has("BatteryVoltage")) o.optInt("BatteryVoltage") / 10.0 else null,
+                signal = o.optStringOrNull("DisplayedSignalStrength"),
+                firmware = o.optStringOrNull("ActiveFirmwareVersion"),
+            )
+        }
+
+        return HubState(rooms, hotWater, system, devices)
     }
 
     fun setRoomTemp(roomId: Int, tempC: Double) {
@@ -113,17 +216,108 @@ class WiserHub(host: String, private val secret: String) {
         patch("Room/$roomId", """{"RequestOverride":{"Type":"Manual","SetPoint":$setPoint}}""")
     }
 
-    /** Drops any manual override so the room follows its schedule again. */
-    fun resumeRoomSchedule(roomId: Int) =
-        patch("Room/$roomId", """{"RequestOverride":{"Type":"None"}}""")
+    /** Drops any manual override or boost so the room follows its schedule again. */
+    fun resumeRoomSchedule(roomId: Int) = patch("Room/$roomId", CANCEL_OVERRIDE)
+
+    /** Raises the room's target by [deltaC] for [minutes], then reverts. */
+    fun boostRoom(roomId: Int, deltaC: Double, minutes: Int) = patch(
+        "Room/$roomId",
+        """{"RequestOverride":{"Type":"Boost","DurationMinutes":$minutes,"IncreaseSetPointBy":${(deltaC * 10).roundToInt()}}}""",
+    )
+
+    fun setRoomMode(roomId: Int, mode: RoomMode) {
+        patch("Room/$roomId", CANCEL_OVERRIDE)
+        when (mode) {
+            RoomMode.AUTO -> patch("Room/$roomId", """{"Mode":"Auto"}""")
+            RoomMode.MANUAL -> patch("Room/$roomId", """{"Mode":"Manual"}""")
+            RoomMode.OFF -> {
+                patch("Room/$roomId", """{"Mode":"Manual"}""")
+                patch("Room/$roomId", """{"RequestOverride":{"Type":"Manual","SetPoint":$SCHEDULE_OFF}}""")
+            }
+        }
+    }
+
+    fun setWindowDetection(roomId: Int, enabled: Boolean) =
+        patch("Room/$roomId", """{"WindowDetectionActive":$enabled}""")
+
+    /** Jumps the room to its next scheduled target early. */
+    fun advanceRoom(room: Room) {
+        val next = nextScheduled(room.scheduleId, heating = true)
+        patch("Room/${room.id}", CANCEL_OVERRIDE)
+        patch("Room/${room.id}", """{"RequestOverride":{"Type":"Manual","SetPoint":$next}}""")
+    }
 
     fun boostHotWater(hotWaterId: Int, minutes: Int) = patch(
         "HotWater/$hotWaterId",
         """{"RequestOverride":{"Type":"Manual","DurationMinutes":$minutes,"SetPoint":$HOT_WATER_ON}}""",
     )
 
-    fun cancelHotWaterBoost(hotWaterId: Int) =
-        patch("HotWater/$hotWaterId", """{"RequestOverride":{"Type":"None"}}""")
+    fun cancelHotWaterBoost(hotWaterId: Int) = patch("HotWater/$hotWaterId", CANCEL_OVERRIDE)
+
+    fun setHotWaterMode(hotWaterId: Int, mode: HotWaterMode) {
+        val path = "HotWater/$hotWaterId"
+        if (mode == HotWaterMode.AUTO) {
+            patch(path, """{"Mode":"Auto","RequestOverride":{"Type":"None"}}""")
+        } else {
+            patch(path, """{"Mode":"Manual","RequestOverride":{"Type":"None"}}""")
+            overrideHotWater(hotWaterId, mode == HotWaterMode.ON)
+        }
+    }
+
+    /** Jumps the hot water to its next scheduled state early. */
+    fun advanceHotWater(hotWater: HotWater) {
+        val next = nextScheduled(hotWater.scheduleId, heating = false)
+        patch("HotWater/${hotWater.id}", CANCEL_OVERRIDE)
+        overrideHotWater(hotWater.id, next != 0)
+    }
+
+    private fun overrideHotWater(hotWaterId: Int, on: Boolean) = patch(
+        "HotWater/$hotWaterId",
+        """{"RequestOverride":{"Type":"Manual","SetPoint":${if (on) HOT_WATER_ON else SCHEDULE_OFF}}}""",
+    )
+
+    private fun nextScheduled(scheduleId: Int, heating: Boolean): Int =
+        fetchSchedules().firstOrNull { it.id == scheduleId && it.heating == heating }?.nextValue
+            ?: throw IOException("The hub did not say what comes next in the schedule")
+
+    /** Away mode drops every room to the hub's away temperature until switched off. */
+    fun setAway(enabled: Boolean) =
+        patch("System", """{"RequestOverride":{"Type":${if (enabled) 2 else 0}}}""")
+
+    fun setEcoMode(enabled: Boolean) = patch("System", """{"EcoModeEnabled":$enabled}""")
+
+    fun setComfortMode(enabled: Boolean) = patch("System", """{"ComfortModeEnabled":$enabled}""")
+
+    /**
+     * Boiler readings as (label, value) pairs. Only has content when the hub is
+     * wired to the boiler over OpenTherm; otherwise the list is empty.
+     */
+    fun fetchOpenTherm(): List<Pair<String, String>> {
+        val text = attempt("GET", "/data/v2/opentherm/", null)
+            ?: attempt("GET", "/data/v2/openTherm/", null)
+            ?: return emptyList()
+        val json = JSONObject(text)
+        val live = json.optJSONObject("operationalData") ?: json
+        val counters = json.optJSONObject("extendedDiagnostics") ?: json
+        val out = mutableListOf<Pair<String, String>>()
+        fun temp(label: String, key: String) {
+            fromHub(live.optInt(key, NO_READING))?.let { out += label to formatTemp(it) }
+        }
+        temp("Flow temperature", "Ch1FlowTemperature")
+        temp("Return temperature", "ChReturnTemperature")
+        temp("Hot water temperature", "Dhw1Temperature")
+        if (live.has("ChPressureBar")) {
+            out += "Pressure" to String.format(Locale.getDefault(), "%.1f bar", live.optInt("ChPressureBar") / 10.0)
+        }
+        if (live.has("RelativeModulationLevel")) {
+            out += "Modulation" to "${live.optInt("RelativeModulationLevel")}%"
+        }
+        if (counters.has("burnerHours")) out += "Burner hours" to counters.optInt("burnerHours").toString()
+        if (counters.has("successfulBurnerStarts")) {
+            out += "Burner starts" to counters.optInt("successfulBurnerStarts").toString()
+        }
+        return out
+    }
 
     /** All heating and on/off schedules on the hub. Needs firmware with the v2 API. */
     fun fetchSchedules(): List<Schedule> {
@@ -132,9 +326,7 @@ class WiserHub(host: String, private val secret: String) {
         val json = JSONObject(text)
         val schedules = mutableListOf<Schedule>()
         for ((key, heating) in listOf("Heating" to true, "OnOff" to false)) {
-            val arr = json.optJSONArray(key) ?: continue
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
+            json.optJSONArray(key).forEachObject { o ->
                 var wrapped = false
                 val days = DAYS.associateWith { day ->
                     val slots = mutableListOf<Slot>()
@@ -169,7 +361,13 @@ class WiserHub(host: String, private val secret: String) {
                     }
                     slots.sortedBy { it.minutes }
                 }
-                schedules += Schedule(o.getInt("id"), o.optString("Name"), heating, days, wrapped)
+                val next = o.optJSONObject("Next")
+                val nextValue = when {
+                    next == null -> null
+                    heating -> if (next.has("DegreesC")) next.optInt("DegreesC") else null
+                    else -> next.optStringOrNull("State")?.let { if (it == "On") 1 else 0 }
+                }
+                schedules += Schedule(o.getInt("id"), o.optString("Name"), heating, days, wrapped, nextValue)
             }
         }
         return schedules
@@ -265,7 +463,7 @@ class WiserHub(host: String, private val secret: String) {
         const val MIN_TEMP_C = 5.0
         const val MAX_TEMP_C = 30.0
 
-        /** Heating schedule value meaning "off" (-20°C in tenths). */
+        /** Setpoint meaning "off" (-20°C in tenths), for rooms, schedules and hot water. */
         const val SCHEDULE_OFF = -200
 
         /** Day names exactly as the hub's schedule API spells them. */
@@ -273,6 +471,7 @@ class WiserHub(host: String, private val secret: String) {
 
         private val BASE_PATHS = listOf("/data/v2/domain/", "/data/domain/")
         private const val SCHEDULES_PATH = "/data/v2/schedules/"
+        private const val CANCEL_OVERRIDE = """{"RequestOverride":{"Type":"None"}}"""
         private const val HOT_WATER_ON = 1100
         private const val NO_READING = -32768
 
@@ -299,6 +498,17 @@ class WiserHub(host: String, private val secret: String) {
 
         private fun fromHhmm(hhmm: Int): Int = (hhmm / 100) * 60 + hhmm % 100
         private fun toHhmm(minutes: Int): Int = (minutes / 60) * 100 + minutes % 60
+
+        private inline fun JSONArray?.forEachObject(block: (JSONObject) -> Unit) {
+            if (this == null) return
+            for (i in 0 until length()) optJSONObject(i)?.let(block)
+        }
+
+        private fun JSONObject.optStringOrNull(key: String): String? =
+            if (has(key) && !isNull(key)) optString(key).takeIf { it.isNotEmpty() } else null
+
+        private fun JSONObject.optBooleanOrNull(key: String): Boolean? =
+            if (has(key) && !isNull(key)) optBoolean(key) else null
 
         fun formatTemp(c: Double?): String =
             if (c == null) "--" else String.format(Locale.getDefault(), "%.1f°", c)

@@ -15,6 +15,65 @@
     <string name="temp_down">Lower target temperature</string>
     <string name="temp_up">Raise target temperature</string>
 
+    <string name="heating_demand">Heating · %1$d%% demand</string>
+    <string name="mode_manual">Manual</string>
+    <string name="mode_manual_hold">Manual (hold a temperature)</string>
+    <string name="mode_always_on">On</string>
+    <string name="mode_always_off">Off</string>
+    <string name="mode_title">%1$s mode</string>
+    <string name="menu_mode">Mode…</string>
+    <string name="more">More</string>
+    <string name="boost">Boost</string>
+    <string name="boost_title">Boost %1$s</string>
+    <string name="boost_option">+%1$d° for %2$s</string>
+    <string name="minutes">%1$d minutes</string>
+    <plurals name="hours">
+        <item quantity="one">%1$d hour</item>
+        <item quantity="other">%1$d hours</item>
+    </plurals>
+    <string name="advance_schedule">Advance schedule</string>
+    <string name="humidity">Humidity %1$d%%</string>
+    <string name="window_open">Window open</string>
+    <string name="window_closed">Window closed</string>
+
+    <string name="boiler_on">Heating is on</string>
+    <string name="boiler_off">Heating is off</string>
+    <string name="away_on">Away mode is on</string>
+    <string name="away_off">Away mode is off</string>
+    <string name="away_set">Set away</string>
+    <string name="away_cancel">I\'m home</string>
+    <string name="away_mode">Away mode</string>
+    <string name="away_mode_help">Holds every room at the away temperature until switched off.</string>
+    <string name="eco_mode">Eco mode</string>
+    <string name="eco_mode_help">Lets the hub stop heating early when a room will coast to its target.</string>
+    <string name="comfort_mode">Comfort mode</string>
+    <string name="comfort_mode_help">Starts heating early so rooms reach their target at the scheduled time.</string>
+
+    <string name="system">System</string>
+    <string name="sys_controls">Controls</string>
+    <string name="sys_window_detection">Open window detection</string>
+    <string name="sys_hub">Hub</string>
+    <string name="sys_firmware">Firmware</string>
+    <string name="sys_cloud">Cloud connection</string>
+    <string name="sys_fuel">Boiler fuel type</string>
+    <string name="sys_brand">Brand</string>
+    <string name="sys_opentherm">OpenTherm link to boiler</string>
+    <string name="sys_devices">Devices</string>
+    <string name="sys_boiler">Boiler</string>
+    <string name="connected_yes">Connected</string>
+    <string name="connected_no">Not connected</string>
+    <string name="device_roomstat">Room thermostat</string>
+    <string name="device_trv">Radiator valve</string>
+    <string name="device_hub">Hub</string>
+    <string name="device_battery">Battery: %1$s</string>
+    <string name="device_signal">Signal: %1$s</string>
+    <string name="device_firmware">Firmware: %1$s</string>
+
+    <string name="find_hub">Find hub on this network</string>
+    <string name="searching">Searching for a hub…</string>
+    <string name="hub_found">Found %1$s. Check the secret, then save.</string>
+    <string name="hub_not_found">No hub found. Check the phone is on your home Wi-Fi, or enter the address by hand.</string>
+
     <string name="hot_water">Hot water</string>
     <string name="on">On</string>
     <string name="off">Off</string>

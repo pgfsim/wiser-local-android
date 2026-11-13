@@ -7,8 +7,16 @@ account involved.
 - **App:** room temperatures, target temperature up/down in 0.5° steps, resume
   schedule, hot water boost, and a weekly schedule editor for each room and
   for hot water.
+- **Rooms:** timed boost, mode (follow schedule, manual, off), advance to the
+  next scheduled setting, humidity, heat demand and open-window state.
+- **Whole house:** a boiler on/off indicator and away mode.
+- **System screen:** Eco and Comfort mode switches, open window detection per
+  room, hub firmware and cloud status, the boiler fuel type set on the hub,
+  battery and signal for each device, and boiler readings when the hub is
+  wired over OpenTherm.
 - **Home screen widget:** current and target temperature for one room.
-- **Quick settings tile:** start or cancel a hot water boost.
+- **Quick settings tiles:** hot water boost, and away mode.
+- **Setup:** can find the hub on your network without typing its address.
 
 It only works while the phone can reach the hub, so on your home Wi-Fi or over a
 VPN into your home network.
@@ -58,6 +66,13 @@ in tenths of a degree.
 | Resume schedule | `PATCH Room/{id}` `{"RequestOverride":{"Type":"None"}}` |
 | Boost hot water | `PATCH HotWater/{id}` `{"RequestOverride":{"Type":"Manual","DurationMinutes":60,"SetPoint":1100}}` |
 | Cancel boost | `PATCH HotWater/{id}` `{"RequestOverride":{"Type":"None"}}` |
+| Boost room | `PATCH Room/{id}` `{"RequestOverride":{"Type":"Boost","DurationMinutes":60,"IncreaseSetPointBy":20}}` |
+| Room mode | `PATCH Room/{id}` `{"Mode":"Auto"}` or `{"Mode":"Manual"}` |
+| Window detection | `PATCH Room/{id}` `{"WindowDetectionActive":true}` |
+| Hot water mode | `PATCH HotWater/{id}` `{"Mode":"Manual","RequestOverride":{"Type":"None"}}` |
+| Away mode | `PATCH System` `{"RequestOverride":{"Type":2}}` (`0` to cancel) |
+| Eco / Comfort mode | `PATCH System` `{"EcoModeEnabled":true}` / `{"ComfortModeEnabled":true}` |
+| Boiler readings | `GET /data/v2/opentherm/` |
 | Read schedules | `GET /data/v2/schedules/` |
 | Save room schedule | `PATCH /data/v2/schedules/Heating/{id}` `{"Monday":{"Time":[630,830],"DegreesC":[200,160]}, ...}` |
 | Save hot water schedule | `PATCH /data/v2/schedules/OnOff/{id}` `{"Monday":[630,-830], ...}` |
@@ -85,6 +100,9 @@ and `org.json`.
   and edge-to-edge layout handling.
 - Schedule editing needs firmware with the `/data/v2/` API, and is limited to
   eight changes a day.
-- The hub keeps no history and does not say what kind of boiler it controls,
-  so there are no graphs or system-type details.
-- No away mode or per-device details yet.
+- The hub keeps no history, so there are no graphs. It reports a boiler fuel
+  type setting but not whether the boiler is a combi, system or heat pump.
+- "Off" for a room is manual mode with the target set to off, as the hub has
+  no separate off mode.
+- Hub discovery, OpenTherm readings and the window detection switch have not
+  been tried against a real hub.

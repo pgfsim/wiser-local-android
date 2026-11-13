@@ -1,7 +1,11 @@
 package dev.wiserlocal.app
 
 import android.app.Activity
+import android.net.nsd.NsdManager
+import android.net.nsd.NsdServiceInfo
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
@@ -15,6 +19,9 @@ class SettingsActivity : Activity() {
 
     private val io = Executors.newSingleThreadExecutor()
     private var roomIds = listOf<Int>()
+
+    /** Cancels a hub search in progress, if any. */
+    private var stopDiscovery: (() -> Unit)? = null
 
     private lateinit var prefs: Prefs
     private lateinit var host: EditText
@@ -40,6 +47,8 @@ class SettingsActivity : Activity() {
             secret.setText(prefs.secret)
             minutes.setText(prefs.boostMinutes.toString())
         }
+
+        findViewById<Button>(R.id.find_hub).setOnClickListener { findHub() }
 
         findViewById<Button>(R.id.save).setOnClickListener {
             save()
@@ -67,8 +76,68 @@ class SettingsActivity : Activity() {
     }
 
     override fun onDestroy() {
+        stopDiscovery?.invoke()
         io.shutdown()
         super.onDestroy()
+    }
+
+    /**
+     * Looks for a hub announcing itself on the local network. Hubs advertise an
+     * HTTP service whose name starts with "WiserHeat"; the first one found fills
+     * in the address field.
+     */
+    private fun findHub() {
+        stopDiscovery?.invoke()
+        val nsd = getSystemService(NsdManager::class.java)
+        val handler = Handler(Looper.getMainLooper())
+        var finished = false
+        result.setText(R.string.searching)
+
+        lateinit var listener: NsdManager.DiscoveryListener
+        fun finish(message: String?) {
+            if (finished) return
+            finished = true
+            stopDiscovery = null
+            try {
+                nsd.stopServiceDiscovery(listener)
+            } catch (e: IllegalArgumentException) {
+                // Discovery never started, so there is nothing to stop.
+            }
+            if (message != null && !isDestroyed) result.text = message
+        }
+
+        listener = object : NsdManager.DiscoveryListener {
+            override fun onServiceFound(service: NsdServiceInfo) {
+                if (!service.serviceName.contains("WiserHeat", ignoreCase = true)) return
+                @Suppress("DEPRECATION")
+                nsd.resolveService(service, object : NsdManager.ResolveListener {
+                    override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) = Unit
+
+                    override fun onServiceResolved(info: NsdServiceInfo) {
+                        @Suppress("DEPRECATION")
+                        val address = info.host?.hostAddress ?: return
+                        handler.post {
+                            if (finished || isDestroyed) return@post
+                            host.setText(address)
+                            finish(getString(R.string.hub_found, info.serviceName))
+                        }
+                    }
+                })
+            }
+
+            override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
+                handler.post { finish(getString(R.string.hub_not_found)) }
+            }
+
+            override fun onDiscoveryStarted(serviceType: String) = Unit
+            override fun onDiscoveryStopped(serviceType: String) = Unit
+            override fun onServiceLost(service: NsdServiceInfo) = Unit
+            override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) = Unit
+        }
+
+        stopDiscovery = { finish(null) }
+        nsd.discoverServices("_http._tcp", NsdManager.PROTOCOL_DNS_SD, listener)
+        handler.postDelayed({ finish(getString(R.string.hub_not_found)) }, DISCOVERY_TIMEOUT_MS)
     }
 
     private fun save() {
@@ -112,5 +181,9 @@ class SettingsActivity : Activity() {
         val selected = roomIds.indexOf(prefs.widgetRoomId)
         if (selected >= 0) widgetRoom.setSelection(selected)
         TempWidgetProvider.render(this, state)
+    }
+
+    companion object {
+        private const val DISCOVERY_TIMEOUT_MS = 8_000L
     }
 }

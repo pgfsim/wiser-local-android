@@ -25,6 +25,13 @@
             android:inputType="textUri"
             android:maxLines="1" />
 
+        <Button
+            android:id="@+id/find_hub"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/find_hub" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
