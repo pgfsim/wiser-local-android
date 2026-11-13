@@ -45,7 +45,9 @@ The APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
 
 Everything hub-related is in [`WiserHub.kt`](app/src/main/java/dev/wiserlocal/app/WiserHub.kt).
 Requests go to `http://<hub>/data/v2/domain/` (falling back to `/data/domain/`
-on older firmware) with the secret in a `SECRET` header. Temperatures are sent
+on older firmware) with the secret in a `SECRET` header. Newer firmware redirects
+to HTTPS with a self-signed certificate; the app then switches to HTTPS for that
+hub and accepts its certificate without verifying it. Temperatures are sent
 in tenths of a degree.
 
 | Action | Request |
@@ -68,7 +70,9 @@ and `org.json`.
   of widget), when you tap its refresh icon, and whenever the app loads data.
 - The hub secret is stored in the app's private storage, unencrypted. Backups
   are disabled so it stays on the device.
-- The hub only speaks plain HTTP, so the app allows cleartext traffic.
+- The first request to the hub is plain HTTP, so the app allows cleartext
+  traffic. On HTTPS the hub certificate cannot be verified, so this is no
+  protection against someone already on your home network.
 - `targetSdk` is held at 35. Raising it needs the newer local-network permission
   and edge-to-edge layout handling.
 - No schedule editing, away mode or per-device details yet.

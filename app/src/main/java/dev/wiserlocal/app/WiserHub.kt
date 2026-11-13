@@ -4,7 +4,14 @@ import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.cert.X509Certificate
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import javax.net.ssl.HostnameVerifier
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocketFactory
+import javax.net.ssl.X509TrustManager
 import kotlin.math.roundToInt
 
 data class Room(
@@ -97,10 +104,18 @@ class WiserHub(host: String, private val secret: String) {
     }
 
     private fun request(method: String, path: String, body: String?): String {
-        var notFound: IOException? = null
         // Newer firmware serves /data/v2/domain/, older firmware only /data/domain/.
         for (base in BASE_PATHS) {
-            val conn = URL("http://$host$base$path").openConnection() as HttpURLConnection
+            attempt(method, "$base$path", body)?.let { return it }
+        }
+        throw IOException("Hub returned HTTP 404 for $path")
+    }
+
+    /** One request, switching to HTTPS if the hub asks for it. Returns null on 404. */
+    private fun attempt(method: String, fullPath: String, body: String?): String? {
+        repeat(2) {
+            val https = host in httpsHosts
+            val conn = open(URL((if (https) "https" else "http") + "://$host$fullPath"))
             try {
                 conn.requestMethod = method
                 conn.connectTimeout = 5_000
@@ -112,18 +127,33 @@ class WiserHub(host: String, private val secret: String) {
                     conn.outputStream.use { it.write(body.toByteArray()) }
                 }
                 val code = conn.responseCode
-                if (code == 404) {
-                    notFound = IOException("Hub returned HTTP 404 for $base$path")
-                    continue
+                when {
+                    // Newer firmware redirects plain HTTP to HTTPS. Retry on HTTPS at the
+                    // same address rather than trusting the Location header.
+                    code in 300..399 && !https -> {
+                        httpsHosts += host
+                        return@repeat
+                    }
+                    code == 404 -> return null
+                    code == 401 || code == 403 -> throw IOException("The hub rejected the secret")
+                    code !in 200..299 -> throw IOException("Hub returned HTTP $code")
+                    else -> return conn.inputStream.bufferedReader().use { it.readText() }
                 }
-                if (code == 401 || code == 403) throw IOException("The hub rejected the secret")
-                if (code !in 200..299) throw IOException("Hub returned HTTP $code")
-                return conn.inputStream.bufferedReader().use { it.readText() }
             } finally {
                 conn.disconnect()
             }
         }
-        throw notFound ?: IOException("No response from hub")
+        throw IOException("Hub kept redirecting")
+    }
+
+    private fun open(url: URL): HttpURLConnection {
+        val conn = url.openConnection() as HttpURLConnection
+        conn.instanceFollowRedirects = false
+        if (conn is HttpsURLConnection) {
+            conn.sslSocketFactory = hubSocketFactory
+            conn.hostnameVerifier = HostnameVerifier { _, _ -> true }
+        }
+        return conn
     }
 
     companion object {
@@ -133,6 +163,24 @@ class WiserHub(host: String, private val secret: String) {
         private val BASE_PATHS = listOf("/data/v2/domain/", "/data/domain/")
         private const val HOT_WATER_ON = 1100
         private const val NO_READING = -32768
+
+        /** Hubs that have told us to use HTTPS, so later calls skip the redirect. */
+        private val httpsHosts: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+        /**
+         * The hub's HTTPS certificate is self-signed and issued for no particular
+         * address, so it cannot be verified. This factory accepts it, and is only
+         * ever attached to connections to the hub address the user entered.
+         */
+        @Suppress("CustomX509TrustManager", "TrustAllX509TrustManager")
+        private val hubSocketFactory: SSLSocketFactory by lazy {
+            val trustAll = object : X509TrustManager {
+                override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = Unit
+                override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) = Unit
+                override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+            }
+            SSLContext.getInstance("TLS").apply { init(null, arrayOf(trustAll), null) }.socketFactory
+        }
 
         /** Hub values are tenths of a degree; out-of-range values mean "no reading". */
         private fun fromHub(raw: Int): Double? = if (raw in -400..1999) raw / 10.0 else null
