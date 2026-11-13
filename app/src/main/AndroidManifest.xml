@@ -35,6 +35,12 @@
             android:parentActivityName=".MainActivity" />
 
         <activity
+            android:name=".ManageActivity"
+            android:exported="false"
+            android:label="@string/manage"
+            android:parentActivityName=".MainActivity" />
+
+        <activity
             android:name=".SystemActivity"
             android:exported="false"
             android:label="@string/system"

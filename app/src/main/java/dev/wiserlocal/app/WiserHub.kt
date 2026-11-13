@@ -66,6 +66,15 @@ data class SystemInfo(
     val brand: String?,
     /** OpenTherm link status, e.g. "Connected" or "Disconnected". */
     val openTherm: String?,
+    /** Temperature rooms are held at in away mode. */
+    val awayTempC: Double?,
+    /** Whether away mode also switches hot water off. */
+    val awayAffectsHotWater: Boolean?,
+    /** Periodic valve exercise that stops radiator valves seizing. */
+    val valveProtection: Boolean?,
+    val autoDaylightSaving: Boolean?,
+    /** Hub clock offset from UTC, as the hub stores it (believed to be minutes). */
+    val timeZoneOffset: Int?,
 )
 
 data class Device(
@@ -78,6 +87,8 @@ data class Device(
     val batteryVolts: Double?,
     val signal: String?,
     val firmware: String?,
+    /** Whether the device's own buttons are locked, or null if it has none. */
+    val locked: Boolean?,
 )
 
 data class HubState(
@@ -104,6 +115,9 @@ data class Schedule(
     val onOffWrapped: Boolean = false,
     /** Value of the next scheduled change (same units as [Slot.value]), if known. */
     val nextValue: Int? = null,
+    /** Day name and minutes past midnight of the next scheduled change, if known. */
+    val nextDay: String? = null,
+    val nextMinutes: Int? = null,
 )
 
 enum class RoomMode { AUTO, MANUAL, OFF }
@@ -192,6 +206,11 @@ class WiserHub(host: String, private val secret: String) {
             fuelType = sys.optJSONObject("BoilerSettings")?.optStringOrNull("FuelType"),
             brand = sys.optStringOrNull("BrandName"),
             openTherm = sys.optStringOrNull("OpenThermConnectionStatus"),
+            awayTempC = if (sys.has("AwayModeSetPointLimit")) fromHub(sys.optInt("AwayModeSetPointLimit")) else null,
+            awayAffectsHotWater = sys.optBooleanOrNull("AwayModeAffectsHotWater"),
+            valveProtection = sys.optBooleanOrNull("ValveProtectionEnabled"),
+            autoDaylightSaving = sys.optBooleanOrNull("AutomaticDaylightSaving"),
+            timeZoneOffset = if (sys.has("TimeZoneOffset")) sys.optInt("TimeZoneOffset") else null,
         )
 
         val devices = mutableListOf<Device>()
@@ -205,6 +224,7 @@ class WiserHub(host: String, private val secret: String) {
                 batteryVolts = if (o.has("BatteryVoltage")) o.optInt("BatteryVoltage") / 10.0 else null,
                 signal = o.optStringOrNull("DisplayedSignalStrength"),
                 firmware = o.optStringOrNull("ActiveFirmwareVersion"),
+                locked = o.optBooleanOrNull("DeviceLockEnabled"),
             )
         }
 
@@ -235,6 +255,28 @@ class WiserHub(host: String, private val secret: String) {
                 patch("Room/$roomId", """{"RequestOverride":{"Type":"Manual","SetPoint":$SCHEDULE_OFF}}""")
             }
         }
+    }
+
+    /** Holds [tempC] for [minutes], then returns to what the room was doing. */
+    fun holdRoomTemp(roomId: Int, tempC: Double, minutes: Int) {
+        val setPoint = (tempC.coerceIn(MIN_TEMP_C, MAX_TEMP_C) * 10).roundToInt()
+        patch(
+            "Room/$roomId",
+            """{"RequestOverride":{"Type":"Manual","DurationMinutes":$minutes,"SetPoint":$setPoint}}""",
+        )
+    }
+
+    fun renameRoom(roomId: Int, name: String) =
+        patch("Room/$roomId", JSONObject().put("Name", name).toString())
+
+    fun createRoom(name: String) {
+        // The reference library sends a lower-case "name" key when creating a room.
+        request("POST", "Room", JSONObject().put("name", name).toString())
+    }
+
+    /** Removes the room from the hub. Its devices stay paired but unassigned. */
+    fun deleteRoom(roomId: Int) {
+        request("DELETE", "Room/$roomId", null)
     }
 
     fun setWindowDetection(roomId: Int, enabled: Boolean) =
@@ -283,6 +325,55 @@ class WiserHub(host: String, private val secret: String) {
     /** Away mode drops every room to the hub's away temperature until switched off. */
     fun setAway(enabled: Boolean) =
         patch("System", """{"RequestOverride":{"Type":${if (enabled) 2 else 0}}}""")
+
+    /** Raises every room's target by [deltaC] for [minutes]. */
+    fun boostAllRooms(deltaC: Double, minutes: Int) = patch(
+        "System",
+        """{"RequestOverride":{"Type":"Boost","DurationMinutes":$minutes,"IncreaseSetPointBy":${(deltaC * 10).roundToInt()}}}""",
+    )
+
+    /** Cancels every boost and manual override in the house. */
+    fun cancelAllOverrides() = patch("System", """{"RequestOverride":{"Type":"CancelUserOverrides"}}""")
+
+    fun setAwayTemp(tempC: Double) =
+        patch("System", """{"AwayModeSetPointLimit":${(tempC.coerceIn(MIN_TEMP_C, MAX_TEMP_C) * 10).roundToInt()}}""")
+
+    // The reference library sends these two flags as the strings "true"/"false".
+    fun setAwayAffectsHotWater(enabled: Boolean) =
+        patch("System", """{"AwayModeAffectsHotWater":"$enabled"}""")
+
+    fun setAutoDaylightSaving(enabled: Boolean) =
+        patch("System", """{"AutomaticDaylightSaving":"$enabled"}""")
+
+    fun setTimeZoneOffset(offset: Int) = patch("System", """{"TimeZoneOffset":$offset}""")
+
+    fun setValveProtection(enabled: Boolean) = patch("System", """{"ValveProtectionEnabled":$enabled}""")
+
+    /** Lets new devices join the hub for [seconds]. */
+    fun permitJoin(seconds: Int) = patch("System/RequestPermitJoin", seconds.toString())
+
+    fun setDeviceLock(deviceId: Int, locked: Boolean) =
+        patch("Device/$deviceId", """{"DeviceLockEnabled":$locked}""")
+
+    /** Makes the device flash so it can be told apart from others. */
+    fun identifyDevice(deviceId: Int) = patch("Device/$deviceId", """{"Identify":true}""")
+
+    /** The hub's Wi-Fi details as (label, value) pairs; empty if it does not report them. */
+    fun fetchNetwork(): List<Pair<String, String>> {
+        val text = attempt("GET", "/data/v2/network/", null) ?: return emptyList()
+        val station = JSONObject(text).optJSONObject("Station") ?: return emptyList()
+        val out = mutableListOf<Pair<String, String>>()
+        station.optStringOrNull("SSID")?.let { out += "Wi-Fi network" to it }
+        station.optJSONObject("RSSI")?.let {
+            if (it.has("Current")) out += "Wi-Fi signal" to "${it.optInt("Current")} dBm"
+        }
+        val address = station.optJSONObject("DhcpStatus")?.optStringOrNull("IPv4Address")
+            ?: station.optJSONObject("NetworkInterface")?.optStringOrNull("IPv4HostAddress")
+        address?.let { out += "IP address" to it }
+        station.optJSONObject("NetworkInterface")?.optStringOrNull("HostName")?.let { out += "Host name" to it }
+        station.optStringOrNull("MacAddress")?.let { out += "MAC address" to it }
+        return out
+    }
 
     fun setEcoMode(enabled: Boolean) = patch("System", """{"EcoModeEnabled":$enabled}""")
 
@@ -367,7 +458,16 @@ class WiserHub(host: String, private val secret: String) {
                     heating -> if (next.has("DegreesC")) next.optInt("DegreesC") else null
                     else -> next.optStringOrNull("State")?.let { if (it == "On") 1 else 0 }
                 }
-                schedules += Schedule(o.getInt("id"), o.optString("Name"), heating, days, wrapped, nextValue)
+                schedules += Schedule(
+                    id = o.getInt("id"),
+                    name = o.optString("Name"),
+                    heating = heating,
+                    days = days,
+                    onOffWrapped = wrapped,
+                    nextValue = nextValue,
+                    nextDay = next?.optStringOrNull("Day"),
+                    nextMinutes = if (next != null && next.has("Time")) fromHhmm(next.optInt("Time")) else null,
+                )
             }
         }
         return schedules
@@ -401,6 +501,40 @@ class WiserHub(host: String, private val secret: String) {
         attempt("PATCH", "$SCHEDULES_PATH$type/${schedule.id}", body.toString())
             ?: throw IOException("The hub did not recognise that schedule")
     }
+
+    fun renameSchedule(schedule: Schedule, name: String) {
+        attempt("PATCH", schedulePath(schedule), JSONObject().put("Name", name).toString())
+            ?: throw IOException("The hub did not recognise that schedule")
+    }
+
+    /** Creates an empty heating schedule that is not yet used by any room. */
+    fun createHeatingSchedule(name: String) {
+        val body = JSONObject()
+            .put("Assignments", JSONArray())
+            .put("Heating", JSONObject().put("Name", name))
+        attempt("POST", "${SCHEDULES_PATH}Assign", body.toString())
+            ?: throw IOException("This hub's firmware cannot create schedules over the local API")
+    }
+
+    fun deleteSchedule(schedule: Schedule) {
+        attempt("DELETE", schedulePath(schedule), null)
+            ?: throw IOException("The hub did not recognise that schedule")
+    }
+
+    /** Overwrites the days of schedule [toId] with those of [from]. */
+    fun copySchedule(from: Schedule, toId: Int) = saveSchedule(from.copy(id = toId))
+
+    /** Makes [roomIds] (all of them, not just new ones) follow [schedule]. */
+    fun assignSchedule(schedule: Schedule, roomIds: List<Int>) {
+        val body = JSONObject()
+            .put("Assignments", JSONArray(roomIds.distinct()))
+            .put("Heating", JSONObject().put("id", schedule.id).put("Name", schedule.name))
+        attempt("PATCH", "${SCHEDULES_PATH}Assign", body.toString())
+            ?: throw IOException("This hub's firmware cannot assign schedules over the local API")
+    }
+
+    private fun schedulePath(schedule: Schedule) =
+        "$SCHEDULES_PATH${if (schedule.heating) "Heating" else "OnOff"}/${schedule.id}"
 
     private fun patch(path: String, body: String) {
         request("PATCH", path, body)

@@ -9,11 +9,19 @@ account involved.
   for hot water.
 - **Rooms:** timed boost, mode (follow schedule, manual, off), advance to the
   next scheduled setting, humidity, heat demand and open-window state.
-- **Whole house:** a boiler on/off indicator and away mode.
-- **System screen:** Eco and Comfort mode switches, open window detection per
-  room, hub firmware and cloud status, the boiler fuel type set on the hub,
-  battery and signal for each device, and boiler readings when the hub is
-  wired over OpenTherm.
+- **Rooms, continued:** hold a temperature for a set time, and see the next
+  scheduled change on each card.
+- **Whole house:** a boiler on/off indicator, away mode, boost all rooms and
+  cancel all overrides.
+- **System screen:** away temperature and whether away turns off hot water,
+  Eco and Comfort mode, valve protection, open window detection per room,
+  battery, signal and button lock for each device, identify a device, add a
+  new device, hub firmware, cloud and Wi-Fi details, the boiler fuel type set
+  on the hub, hub clock settings, and boiler readings when the hub is wired
+  over OpenTherm.
+- **Rooms and schedules screen:** add, rename and delete rooms and heating
+  schedules, copy one schedule over another, and choose which schedule a room
+  follows.
 - **Home screen widget:** current and target temperature for one room.
 - **Quick settings tiles:** hot water boost, and away mode.
 - **Setup:** can find the hub on your network without typing its address.
@@ -72,7 +80,18 @@ in tenths of a degree.
 | Hot water mode | `PATCH HotWater/{id}` `{"Mode":"Manual","RequestOverride":{"Type":"None"}}` |
 | Away mode | `PATCH System` `{"RequestOverride":{"Type":2}}` (`0` to cancel) |
 | Eco / Comfort mode | `PATCH System` `{"EcoModeEnabled":true}` / `{"ComfortModeEnabled":true}` |
+| Timed hold | `PATCH Room/{id}` `{"RequestOverride":{"Type":"Manual","DurationMinutes":60,"SetPoint":200}}` |
+| Rename / add / delete room | `PATCH Room/{id}` `{"Name":"Study"}` / `POST Room` `{"name":"Study"}` / `DELETE Room/{id}` |
+| Boost all / cancel all | `PATCH System` `{"RequestOverride":{"Type":"Boost",...}}` / `{"RequestOverride":{"Type":"CancelUserOverrides"}}` |
+| Away settings | `PATCH System` `{"AwayModeSetPointLimit":160}` / `{"AwayModeAffectsHotWater":"true"}` |
+| Valve protection / clock | `PATCH System` `{"ValveProtectionEnabled":true}` / `{"AutomaticDaylightSaving":"true"}` / `{"TimeZoneOffset":0}` |
+| Add a device | `PATCH System/RequestPermitJoin` `120` |
+| Lock / identify device | `PATCH Device/{id}` `{"DeviceLockEnabled":true}` / `{"Identify":true}` |
+| Hub Wi-Fi details | `GET /data/v2/network/` |
 | Boiler readings | `GET /data/v2/opentherm/` |
+| Rename / delete schedule | `PATCH` or `DELETE /data/v2/schedules/Heating/{id}` (`{"Name":"Weekend"}`) |
+| Create schedule | `POST /data/v2/schedules/Assign` `{"Assignments":[],"Heating":{"Name":"Weekend"}}` |
+| Assign schedule to rooms | `PATCH /data/v2/schedules/Assign` `{"Assignments":[2],"Heating":{"id":3,"Name":"Weekend"}}` |
 | Read schedules | `GET /data/v2/schedules/` |
 | Save room schedule | `PATCH /data/v2/schedules/Heating/{id}` `{"Monday":{"Time":[630,830],"DegreesC":[200,160]}, ...}` |
 | Save hot water schedule | `PATCH /data/v2/schedules/OnOff/{id}` `{"Monday":[630,-830], ...}` |
@@ -105,4 +124,9 @@ and `org.json`.
 - "Off" for a room is manual mode with the target set to off, as the hub has
   no separate off mode.
 - Hub discovery, OpenTherm readings and the window detection switch have not
-  been tried against a real hub.
+  been tried against a real hub. Neither have room and schedule management,
+  adding a device, device lock and identify, or the clock settings; those
+  requests are taken from the reference library.
+- The time zone offset is assumed to be in minutes from UTC.
+- Whether a firmware update is pending is not shown, because the hub's data
+  does not say so clearly.

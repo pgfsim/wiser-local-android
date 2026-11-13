@@ -1,10 +1,10 @@
 package dev.wiserlocal.app
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.os.Bundle
-import android.widget.LinearLayout
-import android.widget.Switch
 import android.widget.TextView
+import android.widget.Toast
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -13,14 +13,20 @@ class SystemActivity : Activity() {
 
     private val io = Executors.newSingleThreadExecutor()
 
-    private lateinit var list: LinearLayout
+    private lateinit var rows: Rows
     private lateinit var status: TextView
+
+    private class Loaded(
+        val state: HubState,
+        val network: List<Pair<String, String>>,
+        val boiler: List<Pair<String, String>>,
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_system)
         actionBar?.setDisplayHomeAsUpEnabled(true)
-        list = findViewById(R.id.system_list)
+        rows = Rows(this, findViewById(R.id.system_list))
         status = findViewById(R.id.system_status)
         load()
     }
@@ -36,7 +42,7 @@ class SystemActivity : Activity() {
     }
 
     /** Runs [action] against the hub (if given), then reloads everything. */
-    private fun load(action: ((WiserHub) -> Unit)? = null) {
+    private fun load(toast: Int? = null, action: ((WiserHub) -> Unit)? = null) {
         val prefs = Prefs(this)
         if (!prefs.configured) {
             status.setText(R.string.not_configured)
@@ -51,67 +57,83 @@ class SystemActivity : Activity() {
                     Thread.sleep(400) // give the hub a moment to apply the change
                 }
                 val state = hub.fetch()
+                val network = try { hub.fetchNetwork() } catch (e: Exception) { emptyList() }
                 // Boiler readings only exist when the hub is wired over OpenTherm.
                 val boiler = if (state.system.openTherm == "Connected") {
                     try { hub.fetchOpenTherm() } catch (e: Exception) { emptyList() }
                 } else {
                     emptyList()
                 }
-                Result.success(state to boiler)
+                Result.success(Loaded(state, network, boiler))
             } catch (e: Exception) {
                 Result.failure(e)
             }
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
                 result.fold(
-                    onSuccess = { (state, boiler) -> show(state, boiler) },
+                    onSuccess = {
+                        show(it)
+                        if (toast != null) Toast.makeText(this, toast, Toast.LENGTH_LONG).show()
+                    },
                     onFailure = { status.text = getString(R.string.error, it.message ?: it.javaClass.simpleName) },
                 )
             }
         }
     }
 
-    private fun show(state: HubState, boiler: List<Pair<String, String>>) {
-        list.removeAllViews()
-        status.text = ""
+    private fun show(loaded: Loaded) {
+        val state = loaded.state
         val system = state.system
+        rows.clear()
+        status.text = ""
 
-        header(R.string.sys_controls)
-        toggle(getString(R.string.away_mode), getString(R.string.away_mode_help), system.away) { hub, on ->
-            hub.setAway(on)
+        rows.header(R.string.sys_controls)
+        rows.toggle(getString(R.string.away_mode), getString(R.string.away_mode_help), system.away) { on ->
+            load { it.setAway(on) }
         }
-        system.ecoMode?.let {
-            toggle(getString(R.string.eco_mode), getString(R.string.eco_mode_help), it) { hub, on -> hub.setEcoMode(on) }
+        system.awayTempC?.let { temp ->
+            rows.info(getString(R.string.away_temp), getString(R.string.tap_to_change, WiserHub.formatTemp(temp))) {
+                pickFromWheel(
+                    getString(R.string.away_temp),
+                    PICKER_TEMPS.map { WiserHub.formatTemp(it / 10.0) },
+                    PICKER_TEMPS.indexOfFirst { it >= (temp * 10).toInt() },
+                ) { index -> load { it.setAwayTemp(PICKER_TEMPS[index] / 10.0) } }
+            }
         }
-        system.comfortMode?.let {
-            toggle(getString(R.string.comfort_mode), getString(R.string.comfort_mode_help), it) { hub, on ->
-                hub.setComfortMode(on)
+        system.awayAffectsHotWater?.let { enabled ->
+            rows.toggle(getString(R.string.away_hot_water), getString(R.string.away_hot_water_help), enabled) { on ->
+                load { it.setAwayAffectsHotWater(on) }
+            }
+        }
+        system.ecoMode?.let { enabled ->
+            rows.toggle(getString(R.string.eco_mode), getString(R.string.eco_mode_help), enabled) { on ->
+                load { it.setEcoMode(on) }
+            }
+        }
+        system.comfortMode?.let { enabled ->
+            rows.toggle(getString(R.string.comfort_mode), getString(R.string.comfort_mode_help), enabled) { on ->
+                load { it.setComfortMode(on) }
+            }
+        }
+        system.valveProtection?.let { enabled ->
+            rows.toggle(getString(R.string.valve_protection), getString(R.string.valve_protection_help), enabled) { on ->
+                load { it.setValveProtection(on) }
             }
         }
 
         val windowRooms = state.rooms.filter { it.windowDetection != null }
         if (windowRooms.isNotEmpty()) {
-            header(R.string.sys_window_detection)
+            rows.header(R.string.sys_window_detection)
             for (room in windowRooms) {
                 val help = getString(if (room.windowOpen) R.string.window_open else R.string.window_closed)
-                toggle(room.name, help, room.windowDetection == true) { hub, on ->
-                    hub.setWindowDetection(room.id, on)
+                rows.toggle(room.name, help, room.windowDetection == true) { on ->
+                    load { it.setWindowDetection(room.id, on) }
                 }
             }
         }
 
-        header(R.string.sys_hub)
-        info(getString(R.string.sys_firmware), system.firmware)
-        info(
-            getString(R.string.sys_cloud),
-            system.cloudConnected?.let { getString(if (it) R.string.connected_yes else R.string.connected_no) },
-        )
-        info(getString(R.string.sys_fuel), system.fuelType)
-        info(getString(R.string.sys_brand), system.brand)
-        info(getString(R.string.sys_opentherm), system.openTherm)
-
         if (state.devices.isNotEmpty()) {
-            header(R.string.sys_devices)
+            rows.header(R.string.sys_devices)
             for (device in state.devices) {
                 val name = listOfNotNull(deviceLabel(device.type), device.roomName).joinToString(" · ")
                 val details = listOfNotNull(
@@ -121,40 +143,68 @@ class SystemActivity : Activity() {
                     },
                     device.signal?.let { getString(R.string.device_signal, spaced(it)) },
                     device.firmware?.let { getString(R.string.device_firmware, it) },
+                    device.locked?.let { getString(if (it) R.string.device_locked else R.string.device_unlocked) },
+                    if (device.type != "Controller") getString(R.string.tap_for_actions) else null,
                 )
-                info(name, details.joinToString("\n").ifEmpty { null })
+                val onClick = if (device.type != "Controller") ({ deviceActions(device, name) }) else null
+                rows.info(name, details.joinToString("\n").ifEmpty { null }, onClick)
+            }
+            rows.info(getString(R.string.add_device), getString(R.string.add_device_help)) {
+                confirm(getString(R.string.add_device_confirm), R.string.add_device_start) {
+                    load(toast = R.string.add_device_started) { it.permitJoin(PERMIT_JOIN_SECONDS) }
+                }
             }
         }
 
-        if (boiler.isNotEmpty()) {
-            header(R.string.sys_boiler)
-            boiler.forEach { (label, value) -> info(label, value) }
+        rows.header(R.string.sys_hub)
+        rows.info(getString(R.string.sys_firmware), system.firmware)
+        rows.info(
+            getString(R.string.sys_cloud),
+            system.cloudConnected?.let { getString(if (it) R.string.connected_yes else R.string.connected_no) },
+        )
+        loaded.network.forEach { (label, value) -> rows.info(label, value) }
+        rows.info(getString(R.string.sys_fuel), system.fuelType)
+        rows.info(getString(R.string.sys_brand), system.brand)
+        rows.info(getString(R.string.sys_opentherm), system.openTherm)
+
+        if (system.autoDaylightSaving != null || system.timeZoneOffset != null) {
+            rows.header(R.string.sys_clock)
+            system.autoDaylightSaving?.let { enabled ->
+                rows.toggle(getString(R.string.daylight_saving), getString(R.string.daylight_saving_help), enabled) { on ->
+                    load { it.setAutoDaylightSaving(on) }
+                }
+            }
+            system.timeZoneOffset?.let { offset ->
+                rows.info(getString(R.string.time_zone), getString(R.string.tap_to_change, offset.toString())) {
+                    promptText(getString(R.string.time_zone_prompt), offset.toString(), numeric = true) { text ->
+                        val value = text.toIntOrNull()
+                        if (value != null && value in -720..840) load { it.setTimeZoneOffset(value) }
+                    }
+                }
+            }
+        }
+
+        if (loaded.boiler.isNotEmpty()) {
+            rows.header(R.string.sys_boiler)
+            loaded.boiler.forEach { (label, value) -> rows.info(label, value) }
         }
     }
 
-    private fun header(textRes: Int) {
-        val view = layoutInflater.inflate(R.layout.row_header, list, false) as TextView
-        view.setText(textRes)
-        list.addView(view)
-    }
-
-    private fun info(label: String, value: String?) {
-        if (value == null) return
-        val row = layoutInflater.inflate(R.layout.row_info, list, false)
-        row.findViewById<TextView>(R.id.info_label).text = label
-        row.findViewById<TextView>(R.id.info_value).text = value
-        list.addView(row)
-    }
-
-    private fun toggle(label: String, help: String, checked: Boolean, onChange: (WiserHub, Boolean) -> Unit) {
-        val row = layoutInflater.inflate(R.layout.row_switch, list, false)
-        row.findViewById<TextView>(R.id.switch_help).text = help
-        row.findViewById<Switch>(R.id.switch_toggle).apply {
-            text = label
-            isChecked = checked
-            setOnCheckedChangeListener { _, on -> load { onChange(it, on) } }
+    private fun deviceActions(device: Device, name: String) {
+        val actions = mutableListOf<Pair<String, () -> Unit>>()
+        actions += getString(R.string.device_identify) to {
+            load(toast = R.string.device_identify_started) { it.identifyDevice(device.id) }
         }
-        list.addView(row)
+        device.locked?.let { locked ->
+            actions += getString(if (locked) R.string.device_unlock else R.string.device_lock) to {
+                load { it.setDeviceLock(device.id, !locked) }
+            }
+        }
+        AlertDialog.Builder(this)
+            .setTitle(name)
+            .setItems(actions.map { it.first }.toTypedArray()) { _, which -> actions[which].second() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun deviceLabel(type: String): String = when (type) {
@@ -167,4 +217,8 @@ class SystemActivity : Activity() {
     /** "TwoThirds" -> "Two thirds", for the hub's run-together labels. */
     private fun spaced(value: String): String =
         value.replace(Regex("(?<=[a-z])(?=[A-Z])"), " ").lowercase().replaceFirstChar { it.uppercase() }
+
+    companion object {
+        private const val PERMIT_JOIN_SECONDS = 120
+    }
 }
