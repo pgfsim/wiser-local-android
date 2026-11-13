@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Wiser Local</string>
+    <string name="settings">Settings</string>
+    <string name="refresh">Refresh</string>
+    <string name="loading">Talking to hub…</string>
+    <string name="updated">Updated %1$s</string>
+    <string name="error">Problem: %1$s</string>
+    <string name="not_configured">Add the hub address and secret in Settings to get started.</string>
+
+    <string name="heating">Heating</string>
+    <string name="manual">Manual override</string>
+    <string name="following_schedule">Following schedule</string>
+    <string name="resume_schedule">Resume schedule</string>
+    <string name="temp_down">Lower target temperature</string>
+    <string name="temp_up">Raise target temperature</string>
+
+    <string name="hot_water">Hot water</string>
+    <string name="on">On</string>
+    <string name="off">Off</string>
+    <string name="boosted">Boosted</string>
+    <string name="boosted_until">Boosted until %1$s</string>
+    <string name="boost_for">Boost %1$d min</string>
+    <string name="cancel_boost">Cancel boost</string>
+
+    <string name="hub_address">Hub IP address</string>
+    <string name="hub_address_hint" translatable="false">192.168.1.50</string>
+    <string name="hub_secret">Hub secret</string>
+    <string name="secret_help">To get the secret: press the Setup button on the hub so its light flashes, join the WiserHeat… Wi-Fi network from this phone, open http://192.168.8.1/secret/ in a browser and copy the text shown. Press Setup again to finish.</string>
+    <string name="boost_minutes">Hot water boost length (minutes)</string>
+    <string name="widget_room">Room shown on the widget</string>
+    <string name="save_and_test">Save and test connection</string>
+    <string name="enter_both">Enter both the hub address and the secret.</string>
+    <plurals name="connected">
+        <item quantity="one">Connected. Found %1$d room.</item>
+        <item quantity="other">Connected. Found %1$d rooms.</item>
+    </plurals>
+
+    <string name="widget_label">Room temperature</string>
+    <string name="widget_description">Shows the current and target temperature of one room.</string>
+    <string name="widget_setup">Open app to set up</string>
+    <string name="widget_offline">Offline</string>
+    <string name="widget_no_rooms">No rooms</string>
+    <string name="widget_target">Target %1$s</string>
+    <string name="widget_target_heating">Target %1$s · heating</string>
+
+    <string name="tile_label">Water boost</string>
+    <string name="tile_setup">Tap to set up</string>
+    <string name="tile_until">Until %1$s</string>
+    <string name="tile_unreachable">Hub unreachable</string>
+</resources>
