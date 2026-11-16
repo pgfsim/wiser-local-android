@@ -130,6 +130,12 @@
     <string name="delete_schedule_confirm">Delete the schedule “%1$s”? This cannot be undone.</string>
     <string name="delete_schedule_in_use">Delete the schedule “%1$s”? It is used by %2$s, which will be left without a schedule. This cannot be undone.</string>
 
+    <string name="moments">Moments</string>
+    <string name="moment_started">Running \u201c%1$s\u201d</string>
+    <string name="device_temp">Reads %1$s</string>
+    <string name="device_target">target %1$s</string>
+    <string name="device_demand">Demand: %1$d%%</string>
+
     <string name="hot_water">Hot water</string>
     <string name="on">On</string>
     <string name="off">Off</string>

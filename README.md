@@ -13,6 +13,9 @@ account involved.
   scheduled change on each card.
 - **Whole house:** a boiler on/off indicator, away mode, boost all rooms and
   cancel all overrides.
+- **Moments:** run any scene set up in the official app.
+- **Radiator valves:** each valve's own temperature, target and demand, on the
+  System screen.
 - **System screen:** away temperature and whether away turns off hot water,
   Eco and Comfort mode, valve protection, open window detection per room,
   battery, signal and button lock for each device, identify a device, add a
@@ -86,6 +89,7 @@ in tenths of a degree.
 | Boost all / cancel all | `PATCH System` `{"RequestOverride":{"Type":"Boost",...}}` / `{"RequestOverride":{"Type":"CancelUserOverrides"}}` |
 | Away settings | `PATCH System` `{"AwayModeSetPointLimit":160}` / `{"AwayModeAffectsHotWater":"true"}` |
 | Valve protection / clock | `PATCH System` `{"ValveProtectionEnabled":true}` / `{"AutomaticDaylightSaving":"true"}` / `{"TimeZoneOffset":0}` |
+| Run a Moment | `PATCH System` `{"TriggerMoment":1}` |
 | Add a device | `PATCH System/RequestPermitJoin` `120` |
 | Lock / identify device | `PATCH Device/{id}` `{"DeviceLockEnabled":true}` / `{"Identify":true}` (`false` to stop) |
 | Hub Wi-Fi details | `GET /data/v2/network/` |

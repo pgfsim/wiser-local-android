@@ -92,13 +92,23 @@ data class Device(
     val firmware: String?,
     /** Whether the device's own buttons are locked, or null if it has none. */
     val locked: Boolean?,
+    /** The device's own temperature reading (radiator valves and room thermostats). */
+    val tempC: Double?,
+    /** The target the device is working to, if it reports one. */
+    val setPointC: Double?,
+    /** How far open a radiator valve is asking to be, 0 to 100. */
+    val demandPercent: Int?,
 )
+
+/** A scene set up in the official app, which the hub can run on request. */
+data class Moment(val id: Int, val name: String)
 
 data class HubState(
     val rooms: List<Room>,
     val hotWater: HotWater?,
     val system: SystemInfo,
     val devices: List<Device>,
+    val moments: List<Moment>,
 )
 
 /**
@@ -145,6 +155,10 @@ class WiserHub(host: String, private val secret: String) {
 
         val roomStats = mutableMapOf<Int, JSONObject>()
         json.optJSONArray("RoomStat").forEachObject { roomStats[it.optInt("id")] = it }
+
+        // Per-device readings live in type-specific lists that share the device's id.
+        val readings = HashMap(roomStats)
+        json.optJSONArray("SmartValve").forEachObject { readings[it.optInt("id")] = it }
 
         val rooms = mutableListOf<Room>()
         val deviceRooms = mutableMapOf<Int, String>()
@@ -228,10 +242,19 @@ class WiserHub(host: String, private val secret: String) {
                 signal = o.optStringOrNull("DisplayedSignalStrength"),
                 firmware = o.optStringOrNull("ActiveFirmwareVersion"),
                 locked = o.optBooleanOrNull("DeviceLockEnabled"),
+                tempC = readings[id]?.let { fromHub(it.optInt("MeasuredTemperature", NO_READING)) },
+                setPointC = readings[id]?.let { fromHub(it.optInt("SetPoint", NO_READING)) },
+                demandPercent = readings[id]?.takeIf { it.has("PercentageDemand") }?.optInt("PercentageDemand"),
             )
         }
 
-        return HubState(rooms, hotWater, system, devices)
+        val moments = mutableListOf<Moment>()
+        json.optJSONArray("Moment").forEachObject { o ->
+            val id = o.optInt("id")
+            moments += Moment(id, o.optStringOrNull("Name") ?: "Moment $id")
+        }
+
+        return HubState(rooms, hotWater, system, devices, moments)
     }
 
     fun setRoomTemp(roomId: Int, tempC: Double) {
@@ -377,6 +400,9 @@ class WiserHub(host: String, private val secret: String) {
         station.optStringOrNull("MacAddress")?.let { out += "MAC address" to it }
         return out
     }
+
+    /** Runs a Moment (scene) that was set up in the official app. */
+    fun triggerMoment(momentId: Int) = patch("System", """{"TriggerMoment":$momentId}""")
 
     fun setEcoMode(enabled: Boolean) = patch("System", """{"EcoModeEnabled":$enabled}""")
 

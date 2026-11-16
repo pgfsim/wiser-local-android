@@ -146,6 +146,11 @@ class SystemActivity : Activity() {
                         getString(R.string.device_battery, spaced(it) + (volts ?: ""))
                     },
                     device.signal?.let { getString(R.string.device_signal, spaced(it)) },
+                    device.tempC?.let { temp ->
+                        val target = device.setPointC?.let { getString(R.string.device_target, WiserHub.formatSetPoint(it)) }
+                        listOfNotNull(getString(R.string.device_temp, WiserHub.formatTemp(temp)), target).joinToString(" \u00b7 ")
+                    },
+                    device.demandPercent?.let { getString(R.string.device_demand, it) },
                     device.firmware?.let { getString(R.string.device_firmware, it) },
                     if (device.type != "Controller") getString(R.string.tap_to_identify) else null,
                 )

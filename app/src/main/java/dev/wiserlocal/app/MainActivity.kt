@@ -13,6 +13,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.TextView
+import android.widget.Toast
 import java.util.Calendar
 import java.util.Date
 import java.util.concurrent.Executors
@@ -106,14 +107,14 @@ class MainActivity : Activity() {
 
     private fun show(state: HubState) {
         list.removeAllViews()
-        addSummary(state.system)
+        addSummary(state.system, state.moments)
         state.rooms.forEach { addRoom(it) }
         state.hotWater?.let { addHotWater(it) }
         status.text = getString(R.string.updated, time(System.currentTimeMillis()))
         TempWidgetProvider.render(this, state)
     }
 
-    private fun addSummary(system: SystemInfo) {
+    private fun addSummary(system: SystemInfo, moments: List<Moment>) {
         val row = layoutInflater.inflate(R.layout.row_summary, list, false)
         row.findViewById<TextView>(R.id.summary_title).setText(
             if (system.boilerFiring) R.string.boiler_on else R.string.boiler_off
@@ -132,6 +133,10 @@ class MainActivity : Activity() {
         }
         row.findViewById<Button>(R.id.summary_cancel_all).setOnClickListener {
             withHub { it.cancelAllOverrides() }
+        }
+        row.findViewById<Button>(R.id.summary_moments).apply {
+            visibility = if (moments.isEmpty()) View.GONE else View.VISIBLE
+            setOnClickListener { pickMoment(moments) }
         }
         list.addView(row)
     }
@@ -231,6 +236,18 @@ class MainActivity : Activity() {
         val day = schedule.nextDay
         return if (day == null || day == today) getString(R.string.next_change, label, clock(minutes))
         else getString(R.string.next_change_day, label, clock(minutes), day.take(3))
+    }
+
+    private fun pickMoment(moments: List<Moment>) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.moments)
+            .setItems(moments.map { it.name }.toTypedArray()) { _, which ->
+                val moment = moments[which]
+                Toast.makeText(this, getString(R.string.moment_started, moment.name), Toast.LENGTH_SHORT).show()
+                withHub { it.triggerMoment(moment.id) }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun pickBoost(title: String, onPicked: (Int) -> Unit) {
