@@ -94,6 +94,13 @@ class ManageActivity : Activity() {
         rows.info(getString(R.string.add_schedule), getString(R.string.add_schedule_help)) {
             promptText(getString(R.string.add_schedule), "") { name -> load { it.createHeatingSchedule(name) } }
         }
+
+        if (state.moments.isNotEmpty()) {
+            rows.header(R.string.moments)
+            for (moment in state.moments) {
+                rows.info(moment.name, getString(R.string.moment_help)) { momentActions(moment) }
+            }
+        }
     }
 
     private fun roomActions(room: Room, rooms: List<Room>, schedules: List<Schedule>) {
@@ -112,6 +119,21 @@ class ManageActivity : Activity() {
             }
         }
         menu(room.name, actions)
+    }
+
+    private fun momentActions(moment: Moment) {
+        menu(moment.name, listOf(
+            getString(R.string.rename) to {
+                promptText(getString(R.string.rename_title, moment.name), moment.name) { name ->
+                    load { it.renameMoment(moment.id, name) }
+                }
+            },
+            getString(R.string.delete) to {
+                confirm(getString(R.string.delete_moment_confirm, moment.name), R.string.delete) {
+                    load { it.deleteMoment(moment.id) }
+                }
+            },
+        ))
     }
 
     private fun pickSchedule(room: Room, rooms: List<Room>, schedules: List<Schedule>) {

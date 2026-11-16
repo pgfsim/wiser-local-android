@@ -404,6 +404,15 @@ class WiserHub(host: String, private val secret: String) {
     /** Runs a Moment (scene) that was set up in the official app. */
     fun triggerMoment(momentId: Int) = patch("System", """{"TriggerMoment":$momentId}""")
 
+    // Rename and delete are not in the reference library. They follow the same
+    // pattern the hub uses for rooms, and are untested on a real hub.
+    fun renameMoment(momentId: Int, name: String) =
+        patch("Moment/$momentId", JSONObject().put("Name", name).toString())
+
+    fun deleteMoment(momentId: Int) {
+        request("DELETE", "Moment/$momentId", null)
+    }
+
     fun setEcoMode(enabled: Boolean) = patch("System", """{"EcoModeEnabled":$enabled}""")
 
     fun setComfortMode(enabled: Boolean) = patch("System", """{"ComfortModeEnabled":$enabled}""")

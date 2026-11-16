@@ -177,12 +177,15 @@ class SystemActivity : Activity() {
         )
         loaded.network.forEach { (label, value) -> rows.info(label, value) }
         system.boiler.forEach { (key, value) ->
-            val shown = when (value) {
-                "true" -> getString(R.string.yes)
-                "false" -> getString(R.string.no)
+            // The official app calls the fuel type "Heat Source Type" and words it this way.
+            val fuel = key == "FuelType"
+            val shown = when {
+                value == "true" -> getString(R.string.yes)
+                value == "false" -> getString(R.string.no)
+                fuel && value in BOILER_FUELS -> getString(R.string.fuel_boiler, spaced(value))
                 else -> spaced(value)
             }
-            rows.info(spaced(key), shown)
+            rows.info(if (fuel) getString(R.string.heat_source_type) else spaced(key), shown)
         }
         rows.info(getString(R.string.sys_brand), system.brand)
         rows.info(getString(R.string.sys_opentherm), system.openTherm)
@@ -267,5 +270,6 @@ class SystemActivity : Activity() {
 
     companion object {
         private const val PERMIT_JOIN_SECONDS = 120
+        private val BOILER_FUELS = setOf("Gas", "Oil", "Electric", "SolidFuel", "Biomass")
     }
 }

@@ -126,6 +126,10 @@
     <string name="copy_schedule">Copy to another schedule</string>
     <string name="copy_schedule_title">Copy %1$s to</string>
     <string name="copy_schedule_confirm">Replace every day of “%1$s” with the times from “%2$s”?</string>
+    <string name="moment_help">Tap to rename or delete</string>
+    <string name="delete_moment_confirm">Delete the Moment “%1$s” from the hub? This cannot be undone.</string>
+    <string name="heat_source_type">Heat source type</string>
+    <string name="fuel_boiler">%1$s boiler</string>
     <string name="delete_room_confirm">Delete the room “%1$s” from the hub? This cannot be undone.</string>
     <string name="delete_schedule_confirm">Delete the schedule “%1$s”? This cannot be undone.</string>
     <string name="delete_schedule_in_use">Delete the schedule “%1$s”? It is used by %2$s, which will be left without a schedule. This cannot be undone.</string>
