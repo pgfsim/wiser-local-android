@@ -668,7 +668,7 @@ class WiserHub(host: String, private val secret: String) {
         /** Hub values are tenths of a degree; out-of-range values mean "no reading". */
         private fun fromHub(raw: Int): Double? = if (raw in -400..1999) raw / 10.0 else null
 
-        private val BOILER_KEY = Regex("HeatSource|Boiler|Fuel|HydronicChannel|HotWaterChannel")
+        private val BOILER_KEY = Regex("HeatSource|ControlType|Boiler|Fuel|HydronicChannel|HotWaterChannel")
 
         /**
          * Everything in the hub's "BoilerSettings" block, plus any other simple

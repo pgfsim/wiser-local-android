@@ -129,6 +129,10 @@
     <string name="moment_help">Tap to rename or delete</string>
     <string name="delete_moment_confirm">Delete the Moment “%1$s” from the hub? This cannot be undone.</string>
     <string name="heat_source_type">Heat source type</string>
+    <string name="boiler_type">Boiler type</string>
+    <string name="boiler_standard">Standard</string>
+    <string name="boiler_opentherm">OpenTherm</string>
+    <string name="boiler_opentherm_onoff">OpenTherm (on/off)</string>
     <string name="fuel_boiler">%1$s boiler</string>
     <string name="delete_room_confirm">Delete the room “%1$s” from the hub? This cannot be undone.</string>
     <string name="delete_schedule_confirm">Delete the schedule “%1$s”? This cannot be undone.</string>

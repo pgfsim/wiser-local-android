@@ -179,13 +179,23 @@ class SystemActivity : Activity() {
         system.boiler.forEach { (key, value) ->
             // The official app calls the fuel type "Heat Source Type" and words it this way.
             val fuel = key == "FuelType"
+            // "Boiler Type" there is the control type: relay ("Standard") or OpenTherm.
+            val control = key.contains("ControlType")
             val shown = when {
+                control && value.endsWith("RelayControlled") -> getString(R.string.boiler_standard)
+                control && value.endsWith("OpenThermOnOff") -> getString(R.string.boiler_opentherm_onoff)
+                control && value.endsWith("OpenTherm") -> getString(R.string.boiler_opentherm)
                 value == "true" -> getString(R.string.yes)
                 value == "false" -> getString(R.string.no)
                 fuel && value in BOILER_FUELS -> getString(R.string.fuel_boiler, spaced(value))
                 else -> spaced(value)
             }
-            rows.info(if (fuel) getString(R.string.heat_source_type) else spaced(key), shown)
+            val label = when {
+                fuel -> getString(R.string.heat_source_type)
+                control -> getString(R.string.boiler_type)
+                else -> spaced(key)
+            }
+            rows.info(label, shown)
         }
         rows.info(getString(R.string.sys_brand), system.brand)
         rows.info(getString(R.string.sys_opentherm), system.openTherm)
