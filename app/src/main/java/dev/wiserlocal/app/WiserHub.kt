@@ -5,6 +5,7 @@ import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 import java.security.cert.X509Certificate
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -102,6 +103,13 @@ data class Device(
 
 /** A scene set up in the official app, which the hub can run on request. */
 data class Moment(val id: Int, val name: String)
+
+/**
+ * One thing a new Moment does: put a room or the hot water on a manual setting.
+ * [domain] is "Room" or "HotWater"; [setPoint] is in tenths of a degree
+ * ([WiserHub.SCHEDULE_OFF] for off, 1100 for hot water on).
+ */
+data class MomentAction(val domain: String, val id: Int, val setPoint: Int)
 
 data class HubState(
     val rooms: List<Room>,
@@ -409,6 +417,21 @@ class WiserHub(host: String, private val secret: String) {
     fun renameMoment(momentId: Int, name: String) =
         patch("Moment/$momentId", JSONObject().put("Name", name).toString())
 
+    /**
+     * Creates a Moment, in the format the official app uses: name and icon in the
+     * query string, the action in the body with its override as a JSON string.
+     */
+    fun createMoment(name: String, action: MomentAction) {
+        val query = "Name=" + URLEncoder.encode(name, "UTF-8").replace("+", "%20") + "&IconId=0"
+        val override = JSONObject().put("type", "Manual").put("setPoint", action.setPoint)
+        val body = JSONObject()
+            .put("Domain", action.domain)
+            .put("Id", action.id)
+            .put("Action", "RequestOverride")
+            .put("Value", override.toString())
+        request("POST", "Moment?$query", body.toString())
+    }
+
     fun deleteMoment(momentId: Int) {
         request("DELETE", "Moment/$momentId", null)
     }
@@ -644,7 +667,7 @@ class WiserHub(host: String, private val secret: String) {
         private val BASE_PATHS = listOf("/data/v2/domain/", "/data/domain/")
         private const val SCHEDULES_PATH = "/data/v2/schedules/"
         private const val CANCEL_OVERRIDE = """{"RequestOverride":{"Type":"None"}}"""
-        private const val HOT_WATER_ON = 1100
+        const val HOT_WATER_ON = 1100
         private const val NO_READING = -32768
 
         /** Hubs that have told us to use HTTPS, so later calls skip the redirect. */

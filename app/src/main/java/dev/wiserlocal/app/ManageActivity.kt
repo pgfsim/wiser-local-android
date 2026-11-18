@@ -95,10 +95,13 @@ class ManageActivity : Activity() {
             promptText(getString(R.string.add_schedule), "") { name -> load { it.createHeatingSchedule(name) } }
         }
 
-        if (state.moments.isNotEmpty()) {
-            rows.header(R.string.moments)
-            for (moment in state.moments) {
-                rows.info(moment.name, getString(R.string.moment_help)) { momentActions(moment) }
+        rows.header(R.string.moments)
+        for (moment in state.moments) {
+            rows.info(moment.name, getString(R.string.moment_help)) { momentActions(moment) }
+        }
+        rows.info(getString(R.string.add_moment), getString(R.string.add_moment_help)) {
+            promptText(getString(R.string.add_moment), "") { name ->
+                if (name.isNotBlank()) pickMomentAction(state) { action -> load { it.createMoment(name.trim(), action) } }
             }
         }
     }
@@ -134,6 +137,32 @@ class ManageActivity : Activity() {
                 }
             },
         ))
+    }
+
+    /** Asks what the new Moment should do: a room temperature or off, or hot water on or off. */
+    private fun pickMomentAction(state: HubState, onPicked: (MomentAction) -> Unit) {
+        val actions = mutableListOf<Pair<String, () -> Unit>>()
+        for (room in state.rooms) {
+            actions += getString(R.string.moment_room_temp, room.name) to {
+                pickFromWheel(
+                    room.name,
+                    PICKER_TEMPS.map { WiserHub.formatSetPoint(it / 10.0) },
+                    PICKER_TEMPS.indexOf(200).coerceAtLeast(0),
+                ) { index -> onPicked(MomentAction("Room", room.id, PICKER_TEMPS[index])) }
+            }
+            actions += getString(R.string.moment_room_off, room.name) to {
+                onPicked(MomentAction("Room", room.id, WiserHub.SCHEDULE_OFF))
+            }
+        }
+        state.hotWater?.let { water ->
+            actions += getString(R.string.moment_water_on) to {
+                onPicked(MomentAction("HotWater", water.id, WiserHub.HOT_WATER_ON))
+            }
+            actions += getString(R.string.moment_water_off) to {
+                onPicked(MomentAction("HotWater", water.id, WiserHub.SCHEDULE_OFF))
+            }
+        }
+        menu(getString(R.string.moment_action_title), actions)
     }
 
     private fun pickSchedule(room: Room, rooms: List<Room>, schedules: List<Schedule>) {

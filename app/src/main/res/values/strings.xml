@@ -126,6 +126,13 @@
     <string name="copy_schedule">Copy to another schedule</string>
     <string name="copy_schedule_title">Copy %1$s to</string>
     <string name="copy_schedule_confirm">Replace every day of “%1$s” with the times from “%2$s”?</string>
+    <string name="add_moment">Add a Moment</string>
+    <string name="add_moment_help">Creates a Moment that sets one room or the hot water.</string>
+    <string name="moment_action_title">What should it do?</string>
+    <string name="moment_room_temp">%1$s: set a temperature</string>
+    <string name="moment_room_off">%1$s: off</string>
+    <string name="moment_water_on">Hot water: on</string>
+    <string name="moment_water_off">Hot water: off</string>
     <string name="moment_help">Tap to rename or delete</string>
     <string name="delete_moment_confirm">Delete the Moment “%1$s” from the hub? This cannot be undone.</string>
     <string name="heat_source_type">Heat source type</string>
