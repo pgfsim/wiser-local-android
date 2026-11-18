@@ -5,6 +5,7 @@ import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLDecoder
 import java.net.URLEncoder
 import java.security.cert.X509Certificate
 import java.util.Locale
@@ -259,9 +260,11 @@ class WiserHub(host: String, private val secret: String) {
         val moments = mutableListOf<Moment>()
         json.optJSONArray("Moment").forEachObject { o ->
             val id = o.optInt("id")
-            // The official app sends the name in a query string with spaces as "+", and the
-            // hub stores it as sent, so "Test heating" comes back as "Test+heating".
-            val name = o.optStringOrNull("Name")?.replace('+', ' ') ?: "Moment $id"
+            // The official app sends the name URL-encoded in a query string and the hub
+            // stores it as sent ("Test+heating", "A%2BB"), so decode it for display.
+            val name = o.optStringOrNull("Name")?.let { raw ->
+                try { URLDecoder.decode(raw, "UTF-8") } catch (e: IllegalArgumentException) { raw }
+            } ?: "Moment $id"
             moments += Moment(id, name, o.optInt("IconId", 0))
         }
 
