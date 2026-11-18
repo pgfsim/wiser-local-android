@@ -135,6 +135,13 @@
     <string name="moment_water_off">Hot water: off</string>
     <string name="moment_water_boost">Hot water: boost for a set time</string>
     <string name="moment_help">Tap to rename or delete</string>
+    <string name="moment_change">Change what it does</string>
+    <string name="moment_does">%1$s: %2$s</string>
+    <string name="moment_other">Set up in the official app · tap for actions</string>
+    <string name="on_lower">on</string>
+    <string name="off_lower">off</string>
+    <string name="on_for">on for %1$s</string>
+    <string name="room_number">Room %1$d</string>
     <string name="delete_moment_confirm">Delete the Moment “%1$s” from the hub? This cannot be undone.</string>
     <string name="heat_source_type">Heat source type</string>
     <string name="boiler_type">Boiler type</string>

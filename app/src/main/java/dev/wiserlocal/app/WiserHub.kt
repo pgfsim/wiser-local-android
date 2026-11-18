@@ -102,7 +102,7 @@ data class Device(
 )
 
 /** A scene set up in the official app, which the hub can run on request. */
-data class Moment(val id: Int, val name: String)
+data class Moment(val id: Int, val name: String, val iconId: Int = 0)
 
 /**
  * One thing a new Moment does: put a room or the hot water on a manual setting.
@@ -259,7 +259,7 @@ class WiserHub(host: String, private val secret: String) {
         val moments = mutableListOf<Moment>()
         json.optJSONArray("Moment").forEachObject { o ->
             val id = o.optInt("id")
-            moments += Moment(id, o.optStringOrNull("Name") ?: "Moment $id")
+            moments += Moment(id, o.optStringOrNull("Name") ?: "Moment $id", o.optInt("IconId", 0))
         }
 
         return HubState(rooms, hotWater, system, devices, moments)
@@ -422,16 +422,50 @@ class WiserHub(host: String, private val secret: String) {
      * query string, the action in the body with its override as a JSON string.
      */
     fun createMoment(name: String, action: MomentAction) {
-        val query = "Name=" + URLEncoder.encode(name, "UTF-8").replace("+", "%20") + "&IconId=0"
+        request("POST", "Moment?" + momentQuery(name, 0), momentBody(action))
+    }
+
+    /**
+     * What a Moment does, read with GET Moment/{id}. Null when it is something
+     * this app cannot describe (for example a room boost, or several actions).
+     */
+    fun fetchMomentAction(momentId: Int): MomentAction? {
+        val text = request("GET", "Moment/$momentId", null).trim()
+        val json = when {
+            text.startsWith("{") -> JSONObject(text)
+            text.startsWith("[") -> JSONArray(text).takeIf { it.length() == 1 }?.optJSONObject(0)
+            else -> null
+        } ?: return null
+        if (json.optString("Action") != "RequestOverride") return null
+        val value = json.optString("Value").takeIf { it.startsWith("{") }?.let { JSONObject(it) } ?: return null
+        if (!value.optString("type").equals("Manual", ignoreCase = true) || !value.has("setPoint")) return null
+        return MomentAction(
+            domain = json.optString("Domain"),
+            id = json.optInt("Id"),
+            setPoint = value.optInt("setPoint"),
+            durationMinutes = value.takeIf { it.has("durationMinutes") }?.optInt("durationMinutes"),
+        )
+    }
+
+    /** Replaces what a Moment does, keeping its name and icon, as the official app does. */
+    fun updateMoment(moment: Moment, action: MomentAction) {
+        request("PATCH", "Moment/${moment.id}?" + momentQuery(moment.name, moment.iconId), momentBody(action))
+    }
+
+    private fun momentQuery(name: String, iconId: Int) =
+        "Name=" + URLEncoder.encode(name, "UTF-8").replace("+", "%20") + "&IconId=$iconId"
+
+    /** The action, with its override as a JSON string inside "Value". */
+    private fun momentBody(action: MomentAction): String {
         val override = JSONObject().put("type", "Manual").put("setPoint", action.setPoint)
         // A timed hot water boost; the official app adds the duration to the same override.
         action.durationMinutes?.let { override.put("durationMinutes", it) }
-        val body = JSONObject()
+        return JSONObject()
             .put("Domain", action.domain)
             .put("Id", action.id)
             .put("Action", "RequestOverride")
             .put("Value", override.toString())
-        request("POST", "Moment?$query", body.toString())
+            .toString()
     }
 
     fun deleteMoment(momentId: Int) {

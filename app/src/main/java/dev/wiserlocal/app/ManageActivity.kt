@@ -53,21 +53,26 @@ class ManageActivity : Activity() {
                     action(hub)
                     Thread.sleep(400) // give the hub a moment to apply the change
                 }
-                Result.success(hub.fetch() to hub.fetchSchedules())
+                val state = hub.fetch()
+                // Each Moment's action needs its own request; a failure just leaves it undescribed.
+                val actions = state.moments.associate { m ->
+                    m.id to try { hub.fetchMomentAction(m.id) } catch (e: Exception) { null }
+                }
+                Result.success(Triple(state, hub.fetchSchedules(), actions))
             } catch (e: Exception) {
                 Result.failure(e)
             }
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
                 result.fold(
-                    onSuccess = { (state, schedules) -> show(state, schedules.filter { it.heating }) },
+                    onSuccess = { (state, schedules, actions) -> show(state, schedules.filter { it.heating }, actions) },
                     onFailure = { status.text = getString(R.string.error, it.message ?: it.javaClass.simpleName) },
                 )
             }
         }
     }
 
-    private fun show(state: HubState, schedules: List<Schedule>) {
+    private fun show(state: HubState, schedules: List<Schedule>, momentActions: Map<Int, MomentAction?>) {
         rows.clear()
         status.text = ""
 
@@ -97,7 +102,8 @@ class ManageActivity : Activity() {
 
         rows.header(R.string.moments)
         for (moment in state.moments) {
-            rows.info(moment.name, getString(R.string.moment_help)) { momentActions(moment) }
+            val detail = momentActions[moment.id]?.let { describe(it, state) } ?: getString(R.string.moment_other)
+            rows.info(moment.name, detail) { momentActions(moment, state) }
         }
         rows.info(getString(R.string.add_moment), getString(R.string.add_moment_help)) {
             promptText(getString(R.string.add_moment), "") { name ->
@@ -124,8 +130,25 @@ class ManageActivity : Activity() {
         menu(room.name, actions)
     }
 
-    private fun momentActions(moment: Moment) {
+    /** "Living Room: 17.0°", "Hot water: on for 1 hour", and so on. */
+    private fun describe(action: MomentAction, state: HubState): String {
+        val setting = when {
+            action.setPoint == WiserHub.SCHEDULE_OFF -> getString(R.string.off_lower)
+            action.domain == "HotWater" && action.durationMinutes != null ->
+                getString(R.string.on_for, durationLabel(action.durationMinutes))
+            action.domain == "HotWater" -> getString(R.string.on_lower)
+            else -> WiserHub.formatSetPoint(action.setPoint / 10.0)
+        }
+        val target = if (action.domain == "HotWater") getString(R.string.hot_water)
+        else state.rooms.firstOrNull { it.id == action.id }?.name ?: getString(R.string.room_number, action.id)
+        return getString(R.string.moment_does, target, setting)
+    }
+
+    private fun momentActions(moment: Moment, state: HubState) {
         menu(moment.name, listOf(
+            getString(R.string.moment_change) to {
+                pickMomentAction(state) { action -> load { it.updateMoment(moment, action) } }
+            },
             getString(R.string.rename) to {
                 promptText(getString(R.string.rename_title, moment.name), moment.name) { name ->
                     load { it.renameMoment(moment.id, name) }

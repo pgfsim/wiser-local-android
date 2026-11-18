@@ -14,7 +14,8 @@ account involved.
 - **Whole house:** a boiler on/off indicator, away mode, boost all rooms and
   cancel all overrides.
 - **Moments:** run any scene set up in the official app, and rename or delete
-  it from the Rooms and schedules screen. New Moments can be added there too,
+  it, or change what it does, from the Rooms and schedules screen. New Moments
+  can be added there too,
   each setting one room, or turning the hot water on, off or on for a set time.
 - **Radiator valves:** each valve's own temperature, target and demand, on the
   System screen.
@@ -93,6 +94,7 @@ in tenths of a degree.
 | Valve protection / clock | `PATCH System` `{"ValveProtectionEnabled":true}` / `{"AutomaticDaylightSaving":"true"}` / `{"TimeZoneOffset":0}` |
 | Run a Moment | `PATCH System` `{"TriggerMoment":1}` |
 | Create Moment | `POST Moment?Name=Bedtime&IconId=0` `{"Domain":"HotWater","Id":2,"Action":"RequestOverride","Value":"{\"type\":\"Manual\",\"setPoint\":-200}"}` |
+| Read / change a Moment's action | `GET Moment/{id}` / `PATCH Moment/{id}?Name=Bedtime&IconId=51` with the same body as Create |
 | Rename / delete Moment | `PATCH Moment/{id}` `{"Name":"Bedtime"}` / `DELETE Moment/{id}` |
 | Add a device | `PATCH System/RequestPermitJoin` `120` |
 | Lock / identify device | `PATCH Device/{id}` `{"DeviceLockEnabled":true}` / `{"Identify":true}` (`false` to stop) |
@@ -136,8 +138,9 @@ and `org.json`.
   been tried against a real hub. Neither have room and schedule management,
   adding a device, device lock and identify, or the clock settings; those
   requests are taken from the reference library.
-- A new Moment can only do one thing (one room or the hot water), and what an
-  existing Moment does cannot be edited; use the official app for those.
+- A Moment made or changed here does one thing: sets one room, or turns the
+  hot water on, off or on for a set time. Moments with several actions, room
+  boosts, and other device types are left to the official app.
 - The time zone offset is assumed to be in minutes from UTC.
 - Whether a firmware update is pending is not shown, because the hub's data
   does not say so clearly.
