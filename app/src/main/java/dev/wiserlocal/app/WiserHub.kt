@@ -259,7 +259,10 @@ class WiserHub(host: String, private val secret: String) {
         val moments = mutableListOf<Moment>()
         json.optJSONArray("Moment").forEachObject { o ->
             val id = o.optInt("id")
-            moments += Moment(id, o.optStringOrNull("Name") ?: "Moment $id", o.optInt("IconId", 0))
+            // The official app sends the name in a query string with spaces as "+", and the
+            // hub stores it as sent, so "Test heating" comes back as "Test+heating".
+            val name = o.optStringOrNull("Name")?.replace('+', ' ') ?: "Moment $id"
+            moments += Moment(id, name, o.optInt("IconId", 0))
         }
 
         return HubState(rooms, hotWater, system, devices, moments)
@@ -453,7 +456,8 @@ class WiserHub(host: String, private val secret: String) {
     }
 
     private fun momentQuery(name: String, iconId: Int) =
-        "Name=" + URLEncoder.encode(name, "UTF-8").replace("+", "%20") + "&IconId=$iconId"
+        // Spaces go as "+", exactly as the official app sends them, so both apps read the name back the same way.
+        "Name=" + URLEncoder.encode(name, "UTF-8") + "&IconId=$iconId"
 
     /** The action, with its override as a JSON string inside "Value". */
     private fun momentBody(action: MomentAction): String {
