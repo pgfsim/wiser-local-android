@@ -133,6 +133,7 @@
     <string name="moment_room_off">%1$s: off</string>
     <string name="moment_water_on">Hot water: on</string>
     <string name="moment_water_off">Hot water: off</string>
+    <string name="moment_water_boost">Hot water: boost for a set time</string>
     <string name="moment_help">Tap to rename or delete</string>
     <string name="delete_moment_confirm">Delete the Moment “%1$s” from the hub? This cannot be undone.</string>
     <string name="heat_source_type">Heat source type</string>

@@ -109,7 +109,7 @@ data class Moment(val id: Int, val name: String)
  * [domain] is "Room" or "HotWater"; [setPoint] is in tenths of a degree
  * ([WiserHub.SCHEDULE_OFF] for off, 1100 for hot water on).
  */
-data class MomentAction(val domain: String, val id: Int, val setPoint: Int)
+data class MomentAction(val domain: String, val id: Int, val setPoint: Int, val durationMinutes: Int? = null)
 
 data class HubState(
     val rooms: List<Room>,
@@ -424,6 +424,8 @@ class WiserHub(host: String, private val secret: String) {
     fun createMoment(name: String, action: MomentAction) {
         val query = "Name=" + URLEncoder.encode(name, "UTF-8").replace("+", "%20") + "&IconId=0"
         val override = JSONObject().put("type", "Manual").put("setPoint", action.setPoint)
+        // A timed hot water boost; the official app adds the duration to the same override.
+        action.durationMinutes?.let { override.put("durationMinutes", it) }
         val body = JSONObject()
             .put("Domain", action.domain)
             .put("Id", action.id)

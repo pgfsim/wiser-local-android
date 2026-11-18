@@ -15,7 +15,7 @@ account involved.
   cancel all overrides.
 - **Moments:** run any scene set up in the official app, and rename or delete
   it from the Rooms and schedules screen. New Moments can be added there too,
-  each setting one room or the hot water.
+  each setting one room, or turning the hot water on, off or on for a set time.
 - **Radiator valves:** each valve's own temperature, target and demand, on the
   System screen.
 - **System screen:** away temperature and whether away turns off hot water,

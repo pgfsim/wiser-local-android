@@ -161,6 +161,12 @@ class ManageActivity : Activity() {
             actions += getString(R.string.moment_water_off) to {
                 onPicked(MomentAction("HotWater", water.id, WiserHub.SCHEDULE_OFF))
             }
+            actions += getString(R.string.moment_water_boost) to {
+                val durations = MainActivity.DURATIONS
+                pickFromWheel(getString(R.string.moment_water_boost), durations.map { durationLabel(it) }, 1) { index ->
+                    onPicked(MomentAction("HotWater", water.id, WiserHub.HOT_WATER_ON, durations[index]))
+                }
+            }
         }
         menu(getString(R.string.moment_action_title), actions)
     }

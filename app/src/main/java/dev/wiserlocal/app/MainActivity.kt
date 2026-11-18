@@ -394,6 +394,6 @@ class MainActivity : Activity() {
         private const val BOOST_DELTA_C = 2.0
 
         /** Durations offered for boosts and timed holds, in minutes. */
-        private val DURATIONS = listOf(30, 60, 120, 180)
+        val DURATIONS = listOf(30, 60, 120, 180)
     }
 }
