@@ -91,7 +91,7 @@ in tenths of a degree.
 | Away settings | `PATCH System` `{"AwayModeSetPointLimit":160}` / `{"AwayModeAffectsHotWater":"true"}` |
 | Valve protection / clock | `PATCH System` `{"ValveProtectionEnabled":true}` / `{"AutomaticDaylightSaving":"true"}` / `{"TimeZoneOffset":0}` |
 | Run a Moment | `PATCH System` `{"TriggerMoment":1}` |
-| Rename / delete Moment (a guess) | `PATCH Moment/{id}` `{"Name":"Bedtime"}` / `DELETE Moment/{id}` |
+| Rename / delete Moment | `PATCH Moment/{id}` `{"Name":"Bedtime"}` / `DELETE Moment/{id}` |
 | Add a device | `PATCH System/RequestPermitJoin` `120` |
 | Lock / identify device | `PATCH Device/{id}` `{"DeviceLockEnabled":true}` / `{"Identify":true}` (`false` to stop) |
 | Hub Wi-Fi details | `GET /data/v2/network/` |
@@ -134,8 +134,8 @@ and `org.json`.
   been tried against a real hub. Neither have room and schedule management,
   adding a device, device lock and identify, or the clock settings; those
   requests are taken from the reference library.
-- Renaming and deleting a Moment are guesses based on how rooms work, and are
-  untested on a real hub. What a Moment does cannot be edited.
+- What a Moment does cannot be edited, and new Moments cannot be created;
+  use the official app for those.
 - The time zone offset is assumed to be in minutes from UTC.
 - Whether a firmware update is pending is not shown, because the hub's data
   does not say so clearly.
