@@ -147,7 +147,7 @@ fun HomeTab(vm: HubViewModel, modifier: Modifier) {
     val nav = LocalNav.current
     TabScaffold(greeting(), vm, modifier, subtitle = updatedText(context, vm)) {
         val state = vm.state ?: return@TabScaffold
-        item { StatusCard(state.system, vm) }
+        item { StatusCard(state, vm) }
 
         item {
             SectionTitle("Favourites") {
@@ -200,15 +200,25 @@ fun HomeTab(vm: HubViewModel, modifier: Modifier) {
 
 /** Boiler state, away mode and whole-house actions. */
 @Composable
-private fun StatusCard(system: SystemInfo, vm: HubViewModel) {
+private fun StatusCard(state: HubState, vm: HubViewModel) {
     val accents = LocalAccents.current
     val dialogs = LocalDialogs.current
+    val system = state.system
     val firing = system.boilerFiring
+    val calling = state.rooms.filter { it.heating }
+    val warm = firing || calling.isNotEmpty()
+    val (title, detail) = when {
+        firing -> "Boiler is on" to "Heating the house now"
+        calling.isNotEmpty() -> "Boiler resting" to
+            "${calling.joinToString(", ") { if (it.demandPercent > 0) "${it.name} ${it.demandPercent}%" else it.name }} " +
+            "calling for heat. At part demand the boiler runs in short bursts."
+        else -> "Heating is off" to "No room is calling for heat"
+    }
     Card(
         shape = CardShape,
         colors = CardDefaults.cardColors(
-            containerColor = if (firing) accents.heatContainer else MaterialTheme.colorScheme.primaryContainer,
-            contentColor = if (firing) accents.onHeatContainer else MaterialTheme.colorScheme.onPrimaryContainer,
+            containerColor = if (warm) accents.heatContainer else MaterialTheme.colorScheme.primaryContainer,
+            contentColor = if (warm) accents.onHeatContainer else MaterialTheme.colorScheme.onPrimaryContainer,
         ),
     ) {
         Column(Modifier.padding(16.dp)) {
@@ -216,20 +226,17 @@ private fun StatusCard(system: SystemInfo, vm: HubViewModel) {
                 Icon(
                     flameIcon(),
                     contentDescription = null,
-                    tint = if (firing) accents.heat else MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f),
+                    tint = when {
+                        firing -> accents.heat
+                        warm -> accents.heat.copy(alpha = 0.45f)
+                        else -> MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                    },
                     modifier = Modifier.size(32.dp),
                 )
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(
-                        if (firing) "Heating is on" else "Heating is off",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        if (firing) "The boiler is being called for heat" else "No room is calling for heat",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text(detail, style = MaterialTheme.typography.bodyMedium)
                 }
             }
             Row(

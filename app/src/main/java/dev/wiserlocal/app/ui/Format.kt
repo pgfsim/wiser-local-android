@@ -50,8 +50,10 @@ fun Context.roomStatus(room: Room): String = when {
     room.boosted && room.overrideUntilMs > 0 -> "Boosted until ${timeText(room.overrideUntilMs)}"
     room.boosted -> "Boosted"
     room.overridden && room.overrideUntilMs > 0 -> "Held until ${timeText(room.overrideUntilMs)}"
-    room.heating && room.demandPercent > 0 -> "Heating · ${room.demandPercent}% demand"
-    room.heating -> "Heating"
+    // A room "calling for heat" may still have the boiler off for now: at part demand
+    // Wiser runs the boiler in short bursts.
+    room.heating && room.demandPercent > 0 -> "Calling for heat · ${room.demandPercent}%"
+    room.heating -> "Calling for heat"
     room.mode == "Manual" && room.isOff() -> "Off"
     room.mode == "Manual" -> "Manual, schedule ignored"
     room.overridden -> "Manual until the next scheduled change"
