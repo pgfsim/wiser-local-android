@@ -479,7 +479,8 @@ class WiserHub(host: String, private val secret: String) {
         request("DELETE", "Moment/$momentId", null)
     }
 
-    fun setEcoMode(enabled: Boolean) = patch("System", """{"EcoModeEnabled":$enabled}""")
+    /** Same request as the official app: the bare true/false sent to the property's own path. */
+    fun setEcoMode(enabled: Boolean) = patch("System/EcoModeEnabled", enabled.toString())
 
     fun setComfortMode(enabled: Boolean) = patch("System", """{"ComfortModeEnabled":$enabled}""")
 
