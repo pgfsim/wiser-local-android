@@ -16,7 +16,9 @@ The app has four tabs, plus a settings page behind the gear icon:
   temperature, boost, hold a temperature for a set time, mode (schedule,
   manual, off), advance to the next scheduled setting, the next scheduled
   change, humidity and window state. One tab per room also lists its devices.
-- **Insights:** the heat report from your Wiser account: room temperatures,
+- **Insights:** from your Wiser account: energy saved this month and the
+  monthly trend, hours saved by away and eco mode, heating hours over the last
+  30 days against the outdoor minimum and maximum, activity counts, and the heat report: room temperatures,
   set points and outdoor temperature by day, week or month, drawn in the app.
   Tap or drag on the chart for the values at a time, and tap a name to hide it.
 - **Settings:** hub connection (with automatic hub discovery), rooms (add,

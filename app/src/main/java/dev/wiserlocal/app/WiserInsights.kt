@@ -35,6 +35,33 @@ data class HeatReport(
     val nights: List<Pair<Long, Long>>,
 )
 
+/** A figure and what it means, e.g. ("1 time", "turned the heating down"). */
+data class InsightStat(val value: String, val label: String, val warning: Boolean = false)
+
+/** The Insights landing page: savings, activity, and heating hours against the weather. */
+data class InsightsOverview(
+    /** "0%" */
+    val savedPercent: String?,
+    /** "Energy saved so far in November" */
+    val savedTitle: String?,
+    /** "Your previous 3-month average is 0%" */
+    val previousAverage: String?,
+    /** Saving per month, oldest first, as (month start, percent). */
+    val monthlySavings: List<Pair<LocalDate, Double>>,
+    /** Hours saved in away mode and eco mode. */
+    val savings: List<InsightStat>,
+    val ecoDisabled: Boolean,
+    /** Times the heating was turned down or up, hours of sunshine. */
+    val activity: List<InsightStat>,
+    /** Hours the heating was on, one per day for the last 30 days; the last is today. */
+    val heatingHours: List<Double>,
+    /** Days whose figure is incomplete or missing (drawn grey). */
+    val incompleteDays: Set<Int>,
+    /** Daily outdoor minimum and maximum, as (day index, °C). */
+    val minTemps: List<Pair<Int, Double>>,
+    val maxTemps: List<Pair<Int, Double>>,
+)
+
 /**
  * Wiser's Insights pages (insights.wiserhome.com). They are web pages built for the
  * official app's web view, so this reads the chart data out of the heat report's
@@ -62,6 +89,19 @@ class WiserInsights(
             html = get("/Home/${range.page}$query") ?: throw IOException("Wiser's Insights session could not be restored")
         }
         return HeatReportParser.parse(html, range, start)
+    }
+
+    /** The Insights landing page. [ecoEnabled] is passed on as the official app does. */
+    @Synchronized
+    fun overview(ecoEnabled: Boolean?): InsightsOverview {
+        val path = "/?EcoModeEnabled=${if (ecoEnabled == true) "True" else "False"}" +
+            "&AppVersion=$APP_VERSION&ProductType=Schneider&darkmode=false"
+        val html = get(path) ?: run {
+            cookies.clear()
+            get(path) ?: throw IOException("Wiser's Insights session could not be restored")
+        }
+        sessionReady = true
+        return OverviewParser.parse(html)
     }
 
     /** Opens Insights the way the app's web view does, so the site sets up its session. */
@@ -161,4 +201,84 @@ object HeatReportParser {
     private fun time(text: String): Long = runCatching {
         LocalDateTime.parse(text, LOCAL_TIME).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
     }.getOrElse { OffsetDateTime.parse(text).toInstant().toEpochMilli() }
+}
+
+/** Reads the figures and charts out of the Insights landing page. Each part is optional. */
+object OverviewParser {
+
+    private val STAT = Regex(
+        """<div[^>]*class="heading2"[^>]*>\s*([^<]+?)\s*</div>\s*<div class="heading5( red)?">\s*([^<]+?)\s*</div>""",
+    )
+    private val SAVED = Regex("""<div class="heading expanded">\s*([^<]+?)\s*</div>""")
+    private val SAVED_TITLE = Regex("""<div class="heading3">\s*([^<]+?)\s*<br""")
+    private val PREVIOUS = Regex("""<div style="margin-top:5px">\s*([^<]+?)\s*</div>""")
+    private val MONTH_BARS = Regex("""type:"bar",x:\[(.*?)\],.*?y:\[(.*?)\]""", RegexOption.DOT_MATCHES_ALL)
+    private val HOUR_BARS = Regex("""type:"bar",hoverinfo:"none",marker:\{color:\[(.*?)\]\},y:\[(.*?)\]""")
+    private val LINE = Regex("""type:"scatter",x:\[(.*?)\],.*?color:"(#\w+)".*?y:\[(.*?)\]""")
+
+    fun parse(html: String): InsightsOverview {
+        val savings = section(html, "savings")
+        val recent = section(html, "recent")
+        val weather = section(html, "weather")
+
+        val months = MONTH_BARS.find(savings)?.let { m ->
+            val xs = JSONArray("[${m.groupValues[1]}]")
+            val ys = JSONArray("[${m.groupValues[2]}]")
+            (0 until minOf(xs.length(), ys.length())).mapNotNull { i ->
+                runCatching { OffsetDateTime.parse(xs.getString(i)).toLocalDate() to ys.getDouble(i) }.getOrNull()
+            }
+        }.orEmpty()
+
+        val savingStats = STAT.findAll(savings).map { stat(it) }.toList()
+        val activity = STAT.findAll(recent).map { stat(it) }.toList()
+
+        var hours = emptyList<Double>()
+        var incomplete = emptySet<Int>()
+        HOUR_BARS.find(weather)?.let { m ->
+            val colors = JSONArray("[${m.groupValues[1]}]")
+            val ys = JSONArray("[${m.groupValues[2]}]")
+            // The y list can run past the bars; the colour list says how many days there are.
+            val days = colors.length()
+            hours = (0 until days).map { ys.optDouble(it, 0.0) }
+            // Grey bars are days with incomplete or missing data.
+            incomplete = (0 until days).filter { colors.getString(it).equals("#c0c0c0", ignoreCase = true) }.toSet()
+        }
+        val lines = LINE.findAll(weather).map { m ->
+            val xs = JSONArray("[${m.groupValues[1]}]")
+            val ys = JSONArray("[${m.groupValues[3]}]")
+            m.groupValues[2].uppercase() to (0 until minOf(xs.length(), ys.length())).map { xs.getInt(it) to ys.getDouble(it) }
+        }.toMap()
+
+        val overview = InsightsOverview(
+            savedPercent = SAVED.find(savings)?.groupValues?.get(1),
+            savedTitle = SAVED_TITLE.find(savings)?.groupValues?.get(1)?.let(::text),
+            previousAverage = PREVIOUS.find(savings)?.groupValues?.get(1)?.let(::text),
+            monthlySavings = months,
+            savings = savingStats,
+            ecoDisabled = savingStats.any { it.warning && it.label.contains("Eco", ignoreCase = true) },
+            activity = activity,
+            heatingHours = hours,
+            incompleteDays = incomplete,
+            minTemps = lines["#84DCFF"].orEmpty(),
+            maxTemps = lines["#FF3E24"].orEmpty(),
+        )
+        if (overview.savedPercent == null && activity.isEmpty() && hours.isEmpty()) {
+            throw IOException("The Insights page had none of the expected figures")
+        }
+        return overview
+    }
+
+    private fun stat(m: MatchResult) = InsightStat(text(m.groupValues[1]), text(m.groupValues[3]), m.groupValues[2].isNotEmpty())
+
+    /** The HTML of the section with this id, up to the next section. */
+    private fun section(html: String, id: String): String {
+        val start = html.indexOf("<section id=\"$id\"")
+        if (start < 0) return ""
+        val end = html.indexOf("</section>", start).let { if (it < 0) html.length else it }
+        return html.substring(start, end)
+    }
+
+    /** Undoes the few HTML entities these pages use. */
+    private fun text(s: String) = s.replace("&#x27;", "'").replace("&amp;", "&").replace("&nbsp;", " ")
+        .replace("&quot;", "\"").trim()
 }

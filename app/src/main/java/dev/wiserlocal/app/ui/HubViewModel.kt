@@ -20,6 +20,7 @@ import dev.wiserlocal.app.Room
 import dev.wiserlocal.app.Schedule
 import dev.wiserlocal.app.TempWidgetProvider
 import dev.wiserlocal.app.HeatReport
+import dev.wiserlocal.app.InsightsOverview
 import dev.wiserlocal.app.ReportRange
 import dev.wiserlocal.app.WiserCloud
 import dev.wiserlocal.app.WiserInsights
@@ -79,6 +80,8 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
     var report by mutableStateOf<HeatReport?>(null); private set
     var reportBusy by mutableStateOf(false); private set
     var reportError by mutableStateOf<String?>(null); private set
+    var overview by mutableStateOf<InsightsOverview?>(null); private set
+    var overviewError by mutableStateOf<String?>(null); private set
 
     private var inFlight = 0
     private var wantMoments = false
@@ -227,6 +230,21 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Loads the Insights landing page figures (savings, activity, 30 days of heating). */
+    fun loadOverview() {
+        if (!cloudSignedIn) return
+        val eco = state?.system?.ecoMode
+        cloudIo.execute {
+            val result = runCatching { insights.overview(eco) }
+            main.post {
+                result.fold(
+                    onSuccess = { overview = it; overviewError = null },
+                    onFailure = { overviewError = it.message ?: it.javaClass.simpleName },
+                )
+            }
+        }
+    }
+
     /** Loads the heat report for [range] around [date] (defaults: what is showing now). */
     fun showReport(range: ReportRange = reportRange, date: LocalDate = reportDate) {
         reportRange = range
@@ -330,6 +348,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
     private fun forgetSession() {
         session = null
         report = null
+        overview = null
         cloudStore.clear()
         cloudSignedIn = false
         cloudAccount = null

@@ -62,9 +62,20 @@ import dev.wiserlocal.app.R
 @Composable
 fun InsightsTab(vm: HubViewModel, modifier: Modifier) {
     LaunchedEffect(Unit) { vm.cloudCheck() }
-    LaunchedEffect(vm.cloudSignedIn) { if (vm.cloudSignedIn && vm.report == null) vm.showReport() }
+    LaunchedEffect(vm.cloudSignedIn) {
+        if (vm.cloudSignedIn) {
+            vm.loadOverview()
+            if (vm.report == null) vm.showReport()
+        }
+    }
     TabScaffold("Insights", vm, modifier) {
         if (vm.cloudSignedIn) {
+            vm.overview?.let { o ->
+                if (o.savedPercent != null || o.savings.isNotEmpty()) item { SavingsCard(o, vm) }
+                if (o.heatingHours.isNotEmpty()) item { HeatingWeatherCard(o) }
+                if (o.activity.isNotEmpty()) item { ActivityCard(o) }
+            }
+            vm.overviewError?.let { item { NoteCard("Couldn't load your savings and activity: $it") } }
             item { HeatReportCard(vm) }
             item { AccountCard(vm) }
         } else {
