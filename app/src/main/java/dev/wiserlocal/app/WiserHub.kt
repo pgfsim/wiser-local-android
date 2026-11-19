@@ -430,7 +430,7 @@ class WiserHub(host: String, private val secret: String) {
      * query string, one action per line in the body, each override as a JSON string.
      */
     fun createMoment(name: String, actions: List<MomentAction>) {
-        request("POST", "Moment?" + momentQuery(name, 0), momentBody(actions))
+        momentRequest("POST", "Moment?" + momentQuery(name, 0), momentBody(actions))
     }
 
     /**
@@ -439,7 +439,7 @@ class WiserHub(host: String, private val secret: String) {
      * that saving from this app never drops what the official app set up.
      */
     fun fetchMomentActions(momentId: Int): List<MomentAction>? {
-        val objects = momentObjects(request("GET", "Moment/$momentId", null)) ?: return null
+        val objects = momentObjects(momentRequest("GET", "Moment/$momentId", null)) ?: return null
         if (objects.isEmpty()) return null
         return objects.map { parseMomentAction(it) ?: return null }
     }
@@ -485,7 +485,7 @@ class WiserHub(host: String, private val secret: String) {
 
     /** Replaces what a Moment does, keeping its name and icon, as the official app does. */
     fun updateMoment(moment: Moment, actions: List<MomentAction>) {
-        request("PATCH", "Moment/${moment.id}?" + momentQuery(moment.name, moment.iconId), momentBody(actions))
+        momentRequest("PATCH", "Moment/${moment.id}?" + momentQuery(moment.name, moment.iconId), momentBody(actions))
     }
 
     private fun momentQuery(name: String, iconId: Int) =
@@ -691,6 +691,14 @@ class WiserHub(host: String, private val secret: String) {
     private fun patch(path: String, body: String) {
         request("PATCH", path, body)
     }
+
+    /**
+     * What a Moment does lives at the hub's root (/Moment/3, /Moment?Name=..), where
+     * the official app sends it; /data/v2/domain/Moment only holds names and icons.
+     * Falls back to the domain path for firmware without the root one.
+     */
+    private fun momentRequest(method: String, path: String, body: String?): String =
+        attempt(method, "/$path", body) ?: request(method, path, body)
 
     private fun request(method: String, path: String, body: String?): String {
         // Newer firmware serves /data/v2/domain/, older firmware only /data/domain/.
