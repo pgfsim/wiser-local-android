@@ -239,8 +239,8 @@ fun HeatingWeatherCard(o: InsightsOverview) {
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             LegendDot(barColor, "Hours heating")
-            LegendDot(accents.heat, "Outdoor max")
-            LegendDot(accents.water, "Outdoor min")
+            if (o.maxTemps.isNotEmpty()) LegendDot(accents.heat, "Outdoor max")
+            if (o.minTemps.isNotEmpty()) LegendDot(accents.water, "Outdoor min")
             if (o.incompleteDays.isNotEmpty()) LegendDot(grey, "Incomplete day")
         }
     }

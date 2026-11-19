@@ -78,7 +78,7 @@ class WiserInsights(
     @Synchronized
     fun heatReport(range: ReportRange, date: LocalDate): HeatReport {
         val start = startOf(range, date)
-        val query = "?Date=" + URLEncoder.encode(start.format(SERVER_DATE), "UTF-8") + "&AppVersion=$APP_VERSION&DarkMode=false"
+        val query = "?Date=" + URLEncoder.encode(start.format(SERVER_DATE), "UTF-8") + "&AppVersion=$APP_VERSION&DarkMode=true"
         if (!sessionReady) openSession()
         var html = get("/Home/${range.page}$query")
         if (html == null) {
@@ -91,11 +91,14 @@ class WiserInsights(
         return HeatReportParser.parse(html, range, start)
     }
 
+    // Pages are requested in dark mode, as the official app does: the light-mode pages
+    // are laid out differently and are not what this parser was written against.
+
     /** The Insights landing page. [ecoEnabled] is passed on as the official app does. */
     @Synchronized
     fun overview(ecoEnabled: Boolean?): InsightsOverview {
         val path = "/?EcoModeEnabled=${if (ecoEnabled == true) "True" else "False"}" +
-            "&AppVersion=$APP_VERSION&ProductType=Schneider&darkmode=false"
+            "&AppVersion=$APP_VERSION&ProductType=Schneider&darkmode=true"
         val html = get(path) ?: run {
             cookies.clear()
             get(path) ?: throw IOException("Wiser's Insights session could not be restored")
@@ -106,8 +109,8 @@ class WiserInsights(
 
     /** Opens Insights the way the app's web view does, so the site sets up its session. */
     private fun openSession() {
-        get("/?EcoModeEnabled=False&AppVersion=$APP_VERSION&ProductType=Schneider&darkmode=false")
-        get("/Home/Temperatures?AppVersion=$APP_VERSION&darkmode=false")
+        get("/?EcoModeEnabled=False&AppVersion=$APP_VERSION&ProductType=Schneider&darkmode=true")
+        get("/Home/Temperatures?AppVersion=$APP_VERSION&darkmode=true")
         sessionReady = true
     }
 
@@ -243,11 +246,15 @@ object OverviewParser {
             // Grey bars are days with incomplete or missing data.
             incomplete = (0 until days).filter { colors.getString(it).equals("#c0c0c0", ignoreCase = true) }.toSet()
         }
+        // Two lines: the daily minimum and maximum. Tell them apart by their values (the
+        // colours differ between the site's themes); missing days come through as null.
         val lines = LINE.findAll(weather).map { m ->
             val xs = JSONArray("[${m.groupValues[1]}]")
             val ys = JSONArray("[${m.groupValues[3]}]")
-            m.groupValues[2].uppercase() to (0 until minOf(xs.length(), ys.length())).map { xs.getInt(it) to ys.getDouble(it) }
-        }.toMap()
+            (0 until minOf(xs.length(), ys.length()))
+                .filter { !ys.isNull(it) && !xs.isNull(it) }
+                .map { xs.getInt(it) to ys.getDouble(it) }
+        }.filter { it.isNotEmpty() }.sortedBy { line -> line.sumOf { it.second } / line.size }.toList()
 
         val overview = InsightsOverview(
             savedPercent = SAVED.find(savings)?.groupValues?.get(1),
@@ -259,8 +266,8 @@ object OverviewParser {
             activity = activity,
             heatingHours = hours,
             incompleteDays = incomplete,
-            minTemps = lines["#84DCFF"].orEmpty(),
-            maxTemps = lines["#FF3E24"].orEmpty(),
+            minTemps = if (lines.size >= 2) lines.first() else emptyList(),
+            maxTemps = if (lines.size >= 2) lines.last() else lines.firstOrNull().orEmpty(),
         )
         if (overview.savedPercent == null && activity.isEmpty() && hours.isEmpty()) {
             throw IOException("The Insights page had none of the expected figures")

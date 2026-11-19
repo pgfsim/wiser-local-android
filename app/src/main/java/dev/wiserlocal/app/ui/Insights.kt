@@ -244,7 +244,12 @@ private fun Legend(report: HeatReport, hidden: Set<String>, onToggle: (String) -
         }
     }
     Text(
-        "Solid lines: room temperature. Dashed: set point. Blue band: outdoor. Shading: night.",
+        listOfNotNull(
+            "Solid lines: room temperature.",
+            if (report.series.any { it.kind == SeriesKind.SETPOINT }) "Dashed: set point." else null,
+            if (report.series.any { it.kind == SeriesKind.OUTDOOR }) "Blue band: outdoor." else null,
+            if (report.nights.isNotEmpty()) "Shading: night." else null,
+        ).joinToString(" "),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
