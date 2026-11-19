@@ -4,34 +4,30 @@ A small, unofficial Android app for Drayton Wiser heating hubs. It talks straigh
 to the hub over your home network using the hub's local REST API, with no cloud
 account involved.
 
-- **App:** room temperatures, target temperature up/down in 0.5° steps, resume
-  schedule, hot water boost, and a weekly schedule editor for each room and
-  for hot water.
-- **Rooms:** timed boost, mode (follow schedule, manual, off), advance to the
-  next scheduled setting, humidity, heat demand and open-window state.
-- **Rooms, continued:** hold a temperature for a set time, and see the next
-  scheduled change on each card.
-- **Whole house:** a boiler on/off indicator, away mode, boost all rooms and
-  cancel all overrides.
-- **Moments:** run any scene set up in the official app, and rename or delete
-  it, or change what it does, from the Rooms and schedules screen. New Moments
-  can be added there too,
-  each setting one room, or turning the hot water on, off or on for a set time.
-- **Radiator valves:** each valve's own temperature, target and demand, on the
-  System screen.
-- **System screen:** away temperature and whether away turns off hot water,
-  Eco and Comfort mode, valve protection, open window detection per room,
-  battery, signal and button lock for each device, identify a device, add a
-  new device, hub firmware, cloud and Wi-Fi details, the boiler fuel type set
-  on the hub (and any other boiler setting it reports), hub clock settings,
-  and boiler readings when the hub is wired
-  over OpenTherm.
-- **Rooms and schedules screen:** add, rename and delete rooms and heating
-  schedules, copy one schedule over another, and choose which schedule a room
-  follows.
+The app has four tabs, plus a settings page behind the gear icon:
+
+- **Home:** whether the boiler is being called for heat, away mode, boost all
+  rooms and cancel overrides; your favourite rooms and hot water with their
+  controls (choose and order them with Edit); and your Moments, one tap to run.
+- **Automations:** Moments (create, edit, rename, delete and run), Schedules
+  (a weekly editor for each heating schedule and for hot water; add, rename,
+  copy and delete heating schedules), and a placeholder for automations.
+- **Control:** every room and the hot water with full controls: target
+  temperature, boost, hold a temperature for a set time, mode (schedule,
+  manual, off), advance to the next scheduled setting, the next scheduled
+  change, humidity and window state. One tab per room also lists its devices.
+- **Insights:** a placeholder for the heat report, which needs the Wiser cloud
+  account and will come later.
+- **Settings:** hub connection (with automatic hub discovery), rooms (add,
+  rename, delete, choose a schedule), devices (battery, signal, readings,
+  firmware, button lock, identify, add a new device), away mode (away
+  temperature, whether hot water turns off too), smart modes (eco, comfort,
+  open window detection per room), system settings (hub firmware, cloud and
+  Wi-Fi details, heat source and boiler type, brand, OpenTherm, valve
+  protection, hub clock, boiler readings over OpenTherm), home screen
+  favourites, and light or dark theme.
 - **Home screen widget:** current and target temperature for one room.
 - **Quick settings tiles:** hot water boost, and away mode.
-- **Setup:** can find the hub on your network without typing its address.
 
 It only works while the phone can reach the hub, so on your home Wi-Fi or over a
 VPN into your home network.
@@ -114,8 +110,8 @@ time switches off, and off at midnight is `-2400`.
 The payloads follow [msp1974/wiserheatapiv2](https://github.com/msp1974/wiserheatapiv2),
 the library behind the Home Assistant integration.
 
-The app has no third-party dependencies: plain Android views, `HttpURLConnection`
-and `org.json`.
+The UI is Jetpack Compose with Material 3 (in `app/src/main/java/dev/wiserlocal/app/ui/`).
+Talking to the hub uses only `HttpURLConnection` and `org.json`.
 
 ## Limitations
 
@@ -126,8 +122,7 @@ and `org.json`.
 - The first request to the hub is plain HTTP, so the app allows cleartext
   traffic. On HTTPS the hub certificate cannot be verified, so this is no
   protection against someone already on your home network.
-- `targetSdk` is held at 35. Raising it needs the newer local-network permission
-  and edge-to-edge layout handling.
+- `targetSdk` is held at 35. Raising it needs the newer local-network permission.
 - Schedule editing needs firmware with the `/data/v2/` API, and is limited to
   eight changes a day.
 - The hub keeps no history, so there are no graphs. It reports a boiler fuel

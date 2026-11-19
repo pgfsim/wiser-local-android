@@ -15,36 +15,13 @@
 
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <activity
-            android:name=".SettingsActivity"
-            android:exported="false"
-            android:label="@string/settings"
-            android:parentActivityName=".MainActivity" />
-
-        <activity
-            android:name=".ScheduleActivity"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
-            android:exported="false"
-            android:parentActivityName=".MainActivity" />
-
-        <activity
-            android:name=".ManageActivity"
-            android:exported="false"
-            android:label="@string/manage"
-            android:parentActivityName=".MainActivity" />
-
-        <activity
-            android:name=".SystemActivity"
-            android:exported="false"
-            android:label="@string/system"
-            android:parentActivityName=".MainActivity" />
 
         <receiver
             android:name=".TempWidgetProvider"

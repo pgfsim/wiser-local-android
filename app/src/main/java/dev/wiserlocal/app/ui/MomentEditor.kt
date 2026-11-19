@@ -1,0 +1,294 @@
+package dev.wiserlocal.app.ui
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import dev.wiserlocal.app.HubState
+import dev.wiserlocal.app.MomentAction
+import dev.wiserlocal.app.R
+import dev.wiserlocal.app.WiserHub
+
+/** How many actions this app can save in one Moment until the multi-action format is known. */
+private const val SAVABLE_ACTIONS = 1
+
+/** Create or edit a Moment: its name at the top, its actions below. */
+@Composable
+fun MomentEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, momentId: Int?) {
+    val nav = LocalNav.current
+    val dialogs = LocalDialogs.current
+    val state = vm.state
+    val moment = momentId?.let { id -> state?.moments?.firstOrNull { it.id == id } }
+
+    DisposableEffect(Unit) {
+        vm.watchMoments(true)
+        onDispose { vm.watchMoments(false) }
+    }
+
+    var name by remember { mutableStateOf(moment?.name ?: "") }
+    val actions = remember { mutableStateListOf<MomentAction>() }
+    var loaded by remember { mutableStateOf(momentId == null) }
+    var unknown by remember { mutableStateOf(false) }
+    var original by remember { mutableStateOf<MomentAction?>(null) }
+
+    // Fill in the Moment's action once the hub has told us what it is.
+    LaunchedEffect(vm.momentActions, moment) {
+        if (loaded || moment == null || moment.id !in vm.momentActions) return@LaunchedEffect
+        if (name.isEmpty()) name = moment.name
+        val action = vm.momentActions[moment.id]
+        original = action
+        if (action == null) unknown = true else actions.add(action)
+        loaded = true
+    }
+
+    val nameChanged = moment != null && name.trim() != moment.name
+    val actionChanged = actions.toList() != listOfNotNull(original)
+    val dirty = if (moment == null) name.isNotBlank() || actions.isNotEmpty() else nameChanged || actionChanged
+    val canSave = loaded && name.isNotBlank() && when {
+        unknown -> nameChanged
+        else -> actions.size == SAVABLE_ACTIONS && (moment == null || dirty)
+    }
+
+    fun leave() {
+        if (!dirty) nav.pop()
+        else dialogs.confirm("Discard your changes to this Moment?", "Discard") { nav.pop() }
+    }
+    BackHandler { leave() }
+
+    fun save() {
+        val newName = name.trim()
+        when {
+            moment == null -> vm.run("Moment “$newName” added", onSuccess = { nav.pop() }) {
+                it.createMoment(newName, actions.first())
+            }
+            unknown -> vm.run("Moment renamed", onSuccess = { nav.pop() }) { it.renameMoment(moment.id, newName) }
+            else -> vm.run("Moment saved", onSuccess = { nav.pop() }) {
+                it.updateMoment(moment.copy(name = newName), actions.first())
+            }
+        }
+    }
+
+    DetailScaffold(
+        title = if (momentId == null) "New Moment" else "Edit Moment",
+        snackbar = snackbar,
+        onBack = ::leave,
+        loading = vm.loading,
+        actions = { TextButton(onClick = ::save, enabled = canSave && !vm.loading) { Text("Save") } },
+        bottomBar = {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Button(
+                    onClick = {
+                        if (state != null) pickMomentAction(dialogs, state, null) { actions.add(it) }
+                    },
+                    enabled = loaded && !unknown && actions.size < SAVABLE_ACTIONS && state != null,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add action")
+                }
+                if (moment != null) {
+                    OutlinedButton(
+                        onClick = {
+                            dialogs.confirm("Delete the Moment “${moment.name}” from the hub? This cannot be undone.", "Delete") {
+                                vm.run("Moment deleted", onSuccess = { nav.pop() }) { it.deleteMoment(moment.id) }
+                            }
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = LocalAccents.current.danger),
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                    ) { Text("Delete") }
+                }
+            }
+        },
+    ) { padding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(56.dp)
+                        .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(16.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        painterResource(R.drawable.ic_moment),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            HorizontalDivider()
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text("Actions", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Text(
+                    "${if (unknown) "?" else actions.size} of $MAX_MOMENT_ACTIONS",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            when {
+                !loaded -> Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                unknown -> NoteCard(
+                    "This Moment was set up in the official app and does something this app can't show " +
+                        "or change yet, such as several actions or a room boost. You can still rename, run or delete it here.",
+                )
+                actions.isEmpty() -> Text(
+                    "No actions yet. Tap Add action to choose what this Moment does.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            actions.forEachIndexed { index, action ->
+                if (state != null) {
+                    ActionCard(
+                        action,
+                        state,
+                        onClick = { pickMomentAction(dialogs, state, action) { actions[index] = it } },
+                        onRemove = { actions.removeAt(index) },
+                    )
+                }
+            }
+
+            if (actions.size >= SAVABLE_ACTIONS && !unknown) {
+                Text(
+                    "This app can save one action per Moment for now. Moments with several actions " +
+                        "can be made in the official app.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActionCard(action: MomentAction, state: HubState, onClick: () -> Unit, onRemove: () -> Unit) {
+    val accents = LocalAccents.current
+    val water = action.domain == "HotWater"
+    val (target, value) = describeAction(action, state)
+    Card(
+        shape = CardShape,
+        colors = CardDefaults.cardColors(
+            containerColor = if (water) accents.waterContainer else accents.heatContainer,
+            contentColor = if (water) accents.onWaterContainer else accents.onHeatContainer,
+        ),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+    ) {
+        Row(Modifier.padding(start = 16.dp, top = 14.dp, bottom = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                if (water) waterIcon() else flameIcon(),
+                contentDescription = null,
+                tint = if (water) accents.water else accents.heat,
+                modifier = Modifier.size(28.dp),
+            )
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(if (water) "Hot water" else "Heating", style = MaterialTheme.typography.titleMedium)
+                if (!water) Text(target, style = MaterialTheme.typography.bodyMedium)
+            }
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium)
+            IconButton(onClick = onRemove) { Icon(Icons.Default.Close, contentDescription = "Remove action") }
+        }
+    }
+}
+
+@Composable
+fun NoteCard(text: String) {
+    Card(
+        shape = CardShape,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(text, modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/** Asks what an action should do: a room's temperature or off, or hot water on, off or boosted. */
+fun pickMomentAction(dialogs: DialogHost, state: HubState, current: MomentAction?, onPicked: (MomentAction) -> Unit) {
+    val targets = state.rooms.map { "Heating · ${it.name}" } + listOfNotNull(state.hotWater?.let { "Hot water" })
+    dialogs.choice("What should it change?", targets) { index ->
+        val room = state.rooms.getOrNull(index)
+        if (room != null) {
+            val initial = current?.takeIf { it.domain == "Room" && it.id == room.id }?.setPoint ?: 200
+            dialogs.temperature(room.name, initial, allowOff = true) { tenths ->
+                onPicked(MomentAction("Room", room.id, tenths))
+            }
+        } else {
+            val water = state.hotWater ?: return@choice
+            val options = listOf("On", "Off") + DURATIONS.map { "Boost for ${durationText(it)}" }
+            dialogs.choice("Hot water", options) { pick ->
+                onPicked(
+                    when (pick) {
+                        0 -> MomentAction("HotWater", water.id, WiserHub.HOT_WATER_ON)
+                        1 -> MomentAction("HotWater", water.id, WiserHub.SCHEDULE_OFF)
+                        else -> MomentAction("HotWater", water.id, WiserHub.HOT_WATER_ON, DURATIONS[pick - 2])
+                    },
+                )
+            }
+        }
+    }
+}

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="card_bg">#FFEDEFF2</color>
+    <color name="window_bg">#FFF5F8F6</color>
     <color name="widget_bg">#FFFFFFFF</color>
     <color name="widget_text">#FF202124</color>
     <color name="widget_text_secondary">#FF5F6368</color>

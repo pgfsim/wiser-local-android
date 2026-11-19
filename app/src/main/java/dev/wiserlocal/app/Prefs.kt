@@ -23,6 +23,19 @@ class Prefs(context: Context) {
         get() = sp.getInt("boostMinutes", 60)
         set(v) = sp.edit().putInt("boostMinutes", v).apply()
 
+    /** "system", "light" or "dark". */
+    var theme: String
+        get() = sp.getString("theme", "system") ?: "system"
+        set(v) = sp.edit().putString("theme", v).apply()
+
+    /**
+     * Cards on the home screen, in order: "room:<id>" or "hotwater".
+     * Null until the user picks, meaning every room then hot water.
+     */
+    var favourites: List<String>?
+        get() = sp.getString("favourites", null)?.split(',')?.filter { it.isNotBlank() }
+        set(v) = sp.edit().putString("favourites", v?.joinToString(",")).apply()
+
     val configured: Boolean get() = host.isNotBlank() && secret.isNotBlank()
 
     fun hub() = WiserHub(host, secret)
