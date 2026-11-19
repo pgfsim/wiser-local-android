@@ -19,7 +19,11 @@ import dev.wiserlocal.app.Prefs
 import dev.wiserlocal.app.Room
 import dev.wiserlocal.app.Schedule
 import dev.wiserlocal.app.TempWidgetProvider
+import dev.wiserlocal.app.HeatReport
+import dev.wiserlocal.app.ReportRange
 import dev.wiserlocal.app.WiserCloud
+import dev.wiserlocal.app.WiserInsights
+import java.time.LocalDate
 import dev.wiserlocal.app.WiserHub
 import java.io.IOException
 import java.util.concurrent.Executors
@@ -67,6 +71,14 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
     var cloudSignedIn by mutableStateOf(cloudStore.refreshToken != null); private set
     var cloudBusy by mutableStateOf(false); private set
     var cloudError by mutableStateOf<String?>(null); private set
+
+    // Heat report from Wiser's Insights site.
+    private val insights = WiserInsights(cloudStore.insightsBase) { cloudAccessToken() }
+    var reportRange by mutableStateOf(ReportRange.DAY); private set
+    var reportDate by mutableStateOf(LocalDate.now()); private set
+    var report by mutableStateOf<HeatReport?>(null); private set
+    var reportBusy by mutableStateOf(false); private set
+    var reportError by mutableStateOf<String?>(null); private set
 
     private var inFlight = 0
     private var wantMoments = false
@@ -215,6 +227,33 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Loads the heat report for [range] around [date] (defaults: what is showing now). */
+    fun showReport(range: ReportRange = reportRange, date: LocalDate = reportDate) {
+        reportRange = range
+        reportDate = date
+        if (!cloudSignedIn) return
+        reportBusy = true
+        reportError = null
+        cloudIo.execute {
+            val result = runCatching { insights.heatReport(range, date) }
+            main.post {
+                if (range != reportRange || date != reportDate) return@post // a newer request is on its way
+                reportBusy = false
+                result.fold(
+                    onSuccess = { report = it },
+                    onFailure = {
+                        if (it is CloudAuthException) {
+                            forgetSession()
+                            cloudError = "Your Wiser sign-in has expired. Please sign in again."
+                        } else {
+                            reportError = it.message ?: it.javaClass.simpleName
+                        }
+                    },
+                )
+            }
+        }
+    }
+
     /** Signs in to the Wiser account. The password is used for this request only. */
     fun cloudSignIn(email: String, password: String) {
         cloudBusy = true
@@ -290,6 +329,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun forgetSession() {
         session = null
+        report = null
         cloudStore.clear()
         cloudSignedIn = false
         cloudAccount = null

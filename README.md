@@ -16,8 +16,9 @@ The app has four tabs, plus a settings page behind the gear icon:
   temperature, boost, hold a temperature for a set time, mode (schedule,
   manual, off), advance to the next scheduled setting, the next scheduled
   change, humidity and window state. One tab per room also lists its devices.
-- **Insights:** sign in to your Wiser account (needed for the heat report,
-  which only Wiser's cloud keeps). The report itself is still to come.
+- **Insights:** the heat report from your Wiser account: room temperatures,
+  set points and outdoor temperature by day, week or month, drawn in the app.
+  Tap or drag on the chart for the values at a time, and tap a name to hide it.
 - **Settings:** hub connection (with automatic hub discovery), rooms (add,
   rename, delete, choose a schedule), devices (battery, signal, readings,
   firmware, button lock, identify, add a new device), away mode (away
@@ -122,6 +123,13 @@ app's client id in a `Basic` header and `grant_type=password` (or
 out. The password is sent only in that sign-in request and is never stored.
 The refresh token is kept encrypted with a key in the Android Keystore; the
 access token, valid for an hour, is kept in memory only.
+
+The heat report comes from `https://insights.wiserhome.com`, the site the
+official app shows in a web view. It has no data API, so the app requests
+`/Home/DayTemperature?Date=11/18/2026 00:00:00` (or `WeekTemperature`,
+`MonthTemperature`) with the access token as a `Bearer` header, keeps the
+site's session cookie in memory, and reads the readings out of the chart
+script in the returned page. A change to that page could break it.
 
 ## Limitations
 

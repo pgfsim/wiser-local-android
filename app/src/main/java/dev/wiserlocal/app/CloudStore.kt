@@ -21,6 +21,7 @@ class CloudStore(context: Context) {
 
     /** Server address; only changed for testing against a stand-in server. */
     val base: String get() = sp.getString("base", null) ?: WiserCloud.DEFAULT_BASE
+    val insightsBase: String get() = sp.getString("insightsBase", null) ?: WiserInsights.DEFAULT_BASE
 
     var refreshToken: String?
         get() = sp.getString("refresh", null)?.let(::decrypt)
