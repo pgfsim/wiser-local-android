@@ -103,7 +103,9 @@ class WiserInsights(
             cookies.clear()
             get(path) ?: throw IOException("Wiser's Insights session could not be restored")
         }
-        sessionReady = true
+        // Opening the landing page alone is not enough for the heat report: the site only
+        // includes the outdoor temperature once its Temperatures page has been opened, so
+        // leave sessionReady for heatReport() to set up.
         return OverviewParser.parse(html)
     }
 
