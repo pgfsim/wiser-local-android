@@ -479,20 +479,22 @@ class WiserHub(host: String, private val secret: String) {
         request("DELETE", "Moment/$momentId", null)
     }
 
+    fun setEcoMode(enabled: Boolean) = setSystemFlag("EcoModeEnabled", enabled)
+
+    fun setComfortMode(enabled: Boolean) = setSystemFlag("ComfortModeEnabled", enabled)
+
     /**
      * Same request as the official app (the bare true/false sent to the property's own
      * path). Older firmware may not serve that path, so fall back to patching System.
      */
-    fun setEcoMode(enabled: Boolean) {
+    private fun setSystemFlag(name: String, enabled: Boolean) {
         try {
-            patch("System/EcoModeEnabled", enabled.toString())
+            patch("System/$name", enabled.toString())
         } catch (e: IOException) {
             if (e.message == SECRET_REJECTED) throw e
-            patch("System", """{"EcoModeEnabled":$enabled}""")
+            patch("System", """{"$name":$enabled}""")
         }
     }
-
-    fun setComfortMode(enabled: Boolean) = patch("System", """{"ComfortModeEnabled":$enabled}""")
 
     /**
      * Boiler readings as (label, value) pairs. Only has content when the hub is
