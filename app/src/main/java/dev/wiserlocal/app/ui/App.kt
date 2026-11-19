@@ -127,7 +127,8 @@ private fun MainTabs(vm: HubViewModel, nav: Navigator, snackbar: SnackbarHostSta
                         selected = nav.tab == tab,
                         onClick = { nav.tab = tab },
                         icon = { Icon(icon, contentDescription = null) },
-                        label = { Text(tab.label) },
+                        // One line even with large text; "Automations" otherwise breaks in two.
+                        label = { Text(tab.label, maxLines = 1, softWrap = false) },
                     )
                 }
             }

@@ -3,6 +3,8 @@ package dev.wiserlocal.app.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -160,9 +162,14 @@ fun DialogHost.hold(title: String, initialC: Double, onOk: (Double, Int) -> Unit
 fun DialogHost.duration(title: String, label: (Int) -> String = ::durationText, onOk: (Int) -> Unit) =
     choice(title, DURATIONS.map(label)) { onOk(DURATIONS[it]) }
 
+/** Wraps onto a second line when the dialog is too narrow for all four. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DurationChips(selected: Int, onSelect: (Int) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         DURATIONS.forEach { minutes ->
             FilterChip(
                 selected = minutes == selected,
