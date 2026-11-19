@@ -16,8 +16,8 @@ The app has four tabs, plus a settings page behind the gear icon:
   temperature, boost, hold a temperature for a set time, mode (schedule,
   manual, off), advance to the next scheduled setting, the next scheduled
   change, humidity and window state. One tab per room also lists its devices.
-- **Insights:** a placeholder for the heat report, which needs the Wiser cloud
-  account and will come later.
+- **Insights:** sign in to your Wiser account (needed for the heat report,
+  which only Wiser's cloud keeps). The report itself is still to come.
 - **Settings:** hub connection (with automatic hub discovery), rooms (add,
   rename, delete, choose a schedule), devices (battery, signal, readings,
   firmware, button lock, identify, add a new device), away mode (away
@@ -112,6 +112,16 @@ the library behind the Home Assistant integration.
 
 The UI is Jetpack Compose with Material 3 (in `app/src/main/java/dev/wiserlocal/app/ui/`).
 Talking to the hub uses only `HttpURLConnection` and `org.json`.
+
+## Wiser account (Insights)
+
+Only Insights uses the internet. It signs in to Wiser's cloud the same way the
+official app does: `POST https://api-nl.wiserair.com/Login` with the official
+app's client id in a `Basic` header and `grant_type=password` (or
+`grant_type=refresh_token` to renew), and `POST /api/account/logout` to sign
+out. The password is sent only in that sign-in request and is never stored.
+The refresh token is kept encrypted with a key in the Android Keystore; the
+access token, valid for an hour, is kept in memory only.
 
 ## Limitations
 

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -109,7 +110,8 @@ fun TabScaffold(
             modifier = Modifier.padding(padding).fillMaxSize(),
         ) {
             LazyColumn(
-                Modifier.fillMaxSize(),
+                // Keeps text fields and their buttons above the keyboard.
+                Modifier.fillMaxSize().imePadding(),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -278,35 +280,6 @@ private fun MomentTile(moment: Moment, vm: HubViewModel) {
             )
             Spacer(Modifier.width(10.dp))
             Text(moment.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
-
-@Composable
-fun InsightsTab(vm: HubViewModel, modifier: Modifier) {
-    TabScaffold("Insights", vm, modifier) {
-        item {
-            Card(
-                shape = CardShape,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-            ) {
-                Column(Modifier.padding(20.dp)) {
-                    Icon(
-                        painterResource(R.drawable.ic_insights),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(36.dp),
-                    )
-                    Spacer(Modifier.size(12.dp))
-                    Text("Coming later", style = MaterialTheme.typography.titleLarge)
-                    Spacer(Modifier.size(6.dp))
-                    Text(
-                        "Heating history and the heat report come from Wiser's cloud service, not the hub, " +
-                            "so they will need your Wiser account. This tab will show them once that is set up.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-            }
         }
     }
 }

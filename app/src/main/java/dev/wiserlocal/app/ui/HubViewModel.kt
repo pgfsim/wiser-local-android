@@ -8,6 +8,10 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
+import dev.wiserlocal.app.CloudAccount
+import dev.wiserlocal.app.CloudAuthException
+import dev.wiserlocal.app.CloudSession
+import dev.wiserlocal.app.CloudStore
 import dev.wiserlocal.app.Device
 import dev.wiserlocal.app.HubState
 import dev.wiserlocal.app.MomentAction
@@ -15,7 +19,9 @@ import dev.wiserlocal.app.Prefs
 import dev.wiserlocal.app.Room
 import dev.wiserlocal.app.Schedule
 import dev.wiserlocal.app.TempWidgetProvider
+import dev.wiserlocal.app.WiserCloud
 import dev.wiserlocal.app.WiserHub
+import java.io.IOException
 import java.util.concurrent.Executors
 
 /**
@@ -52,6 +58,15 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Device flashing because of Identify, if any. */
     var identifying by mutableStateOf<Device?>(null); private set
+
+    // Wiser cloud account, for Insights. Runs on its own thread so it never holds up the hub.
+    private val cloudStore = CloudStore(app)
+    private val cloudIo = Executors.newSingleThreadExecutor()
+    @Volatile private var session: CloudSession? = null
+    var cloudAccount by mutableStateOf(cloudStore.account); private set
+    var cloudSignedIn by mutableStateOf(cloudStore.refreshToken != null); private set
+    var cloudBusy by mutableStateOf(false); private set
+    var cloudError by mutableStateOf<String?>(null); private set
 
     private var inFlight = 0
     private var wantMoments = false
@@ -200,9 +215,90 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Signs in to the Wiser account. The password is used for this request only. */
+    fun cloudSignIn(email: String, password: String) {
+        cloudBusy = true
+        cloudError = null
+        val cloud = WiserCloud(cloudStore.base)
+        cloudIo.execute {
+            val result = runCatching { cloud.login(email.trim(), password).also(::keepSession) }
+            main.post {
+                cloudBusy = false
+                result.fold(
+                    onSuccess = { cloudSignedIn = true; cloudAccount = it.account; message = "Signed in to Wiser" },
+                    onFailure = { cloudError = it.message ?: it.javaClass.simpleName },
+                )
+            }
+        }
+    }
+
+    /** Checks the saved sign-in still works (renewing it if needed) when Insights opens. */
+    fun cloudCheck() {
+        if (!cloudSignedIn || cloudBusy) return
+        cloudBusy = true
+        cloudIo.execute {
+            val failure = runCatching { cloudAccessToken() }.exceptionOrNull()
+            main.post {
+                cloudBusy = false
+                cloudAccount = session?.account ?: cloudAccount
+                when (failure) {
+                    null -> cloudError = null
+                    is CloudAuthException -> {
+                        forgetSession()
+                        cloudError = "Your Wiser sign-in has expired. Please sign in again."
+                    }
+                    else -> cloudError = "Couldn't reach Wiser: ${failure.message ?: failure.javaClass.simpleName}"
+                }
+            }
+        }
+    }
+
+    /**
+     * A current access token for Wiser's cloud, renewing it with the saved
+     * refresh token when it has run out. Call off the main thread.
+     */
+    fun cloudAccessToken(): String {
+        session?.takeIf { System.currentTimeMillis() < it.expiresAtMs }?.let { return it.accessToken }
+        val refresh = cloudStore.refreshToken ?: throw CloudAuthException("Not signed in")
+        return WiserCloud(cloudStore.base).refresh(refresh).also(::keepSession).accessToken
+    }
+
+    fun cloudSignOut() {
+        cloudBusy = true
+        val cloud = WiserCloud(cloudStore.base)
+        cloudIo.execute {
+            // Tell the server too, so the saved token stops working; sign out locally either way.
+            runCatching {
+                val current = session?.takeIf { System.currentTimeMillis() < it.expiresAtMs }
+                    ?: cloudStore.refreshToken?.let { cloud.refresh(it) }
+                current?.let { cloud.logout(it) }
+            }
+            main.post {
+                cloudBusy = false
+                forgetSession()
+                cloudError = null
+                message = "Signed out of Wiser"
+            }
+        }
+    }
+
+    private fun keepSession(s: CloudSession) {
+        session = s
+        cloudStore.refreshToken = s.refreshToken
+        cloudStore.account = s.account
+    }
+
+    private fun forgetSession() {
+        session = null
+        cloudStore.clear()
+        cloudSignedIn = false
+        cloudAccount = null
+    }
+
     override fun onCleared() {
         stopIdentify()
         io.shutdown()
+        cloudIo.shutdown()
         super.onCleared()
     }
 

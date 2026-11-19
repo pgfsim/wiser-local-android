@@ -71,6 +71,16 @@ fun SettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                 }
             }
             Section {
+                InfoRow(
+                    "Wiser account",
+                    if (vm.cloudSignedIn) vm.cloudAccount?.email ?: "Signed in" else "Not signed in · used for Insights",
+                    showChevron = true,
+                ) {
+                    nav.stack.clear()
+                    nav.tab = Tab.INSIGHTS
+                }
+            }
+            Section {
                 InfoRow("Home screen", "Choose and order your favourites", showChevron = true) { nav.push(Screen.HomeLayout) }
                 RowDivider()
                 InfoRow("App theme", themeLabel(vm.theme), showChevron = true) { nav.push(Screen.Theme) }
