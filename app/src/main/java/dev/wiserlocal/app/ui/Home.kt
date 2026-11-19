@@ -207,11 +207,12 @@ private fun StatusCard(state: HubState, vm: HubViewModel) {
     val firing = system.boilerFiring
     val calling = state.rooms.filter { it.heating }
     val warm = firing || calling.isNotEmpty()
+    val source = heatSourceName(system)
     val (title, detail) = when {
-        firing -> "Boiler is on" to "Heating the house now"
-        calling.isNotEmpty() -> "Boiler resting" to
+        firing -> "$source is on" to "Heating the house now"
+        calling.isNotEmpty() -> "$source resting" to
             "${calling.joinToString(", ") { if (it.demandPercent > 0) "${it.name} ${it.demandPercent}%" else it.name }} " +
-            "calling for heat. At part demand the boiler runs in short bursts."
+            "calling for heat. At part demand the ${source.lowercase()} runs in short bursts."
         else -> "Heating is off" to "No room is calling for heat"
     }
     Card(

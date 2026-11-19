@@ -5,6 +5,7 @@ import android.text.format.DateFormat
 import dev.wiserlocal.app.HotWater
 import dev.wiserlocal.app.Room
 import dev.wiserlocal.app.Schedule
+import dev.wiserlocal.app.SystemInfo
 import dev.wiserlocal.app.WiserHub
 import java.util.Calendar
 import java.util.Date
@@ -42,6 +43,13 @@ fun today(): String = WiserHub.DAYS[(Calendar.getInstance().get(Calendar.DAY_OF_
 /** "TwoThirds" -> "Two thirds", for the hub's run-together labels. */
 fun spaced(value: String): String =
     value.replace(Regex("(?<=[a-z])(?=[A-Z])"), " ").lowercase().replaceFirstChar { it.uppercase() }
+
+/**
+ * "Heat pump" when the hub's heat source type (its FuelType setting) says so,
+ * otherwise "Boiler" (gas, oil, electric, solid fuel, biomass or not reported).
+ */
+fun heatSourceName(system: SystemInfo): String =
+    if (system.boiler.any { (key, value) -> key == "FuelType" && value == "HeatPump" }) "Heat pump" else "Boiler"
 
 fun Room.isOff(): Boolean = setPointC != null && setPointC < WiserHub.MIN_TEMP_C
 
