@@ -479,8 +479,18 @@ class WiserHub(host: String, private val secret: String) {
         request("DELETE", "Moment/$momentId", null)
     }
 
-    /** Same request as the official app: the bare true/false sent to the property's own path. */
-    fun setEcoMode(enabled: Boolean) = patch("System/EcoModeEnabled", enabled.toString())
+    /**
+     * Same request as the official app (the bare true/false sent to the property's own
+     * path). Older firmware may not serve that path, so fall back to patching System.
+     */
+    fun setEcoMode(enabled: Boolean) {
+        try {
+            patch("System/EcoModeEnabled", enabled.toString())
+        } catch (e: IOException) {
+            if (e.message == SECRET_REJECTED) throw e
+            patch("System", """{"EcoModeEnabled":$enabled}""")
+        }
+    }
 
     fun setComfortMode(enabled: Boolean) = patch("System", """{"ComfortModeEnabled":$enabled}""")
 
@@ -677,7 +687,7 @@ class WiserHub(host: String, private val secret: String) {
                         return@repeat
                     }
                     code == 404 -> return null
-                    code == 401 || code == 403 -> throw IOException("The hub rejected the secret")
+                    code == 401 || code == 403 -> throw IOException(SECRET_REJECTED)
                     code !in 200..299 -> throw IOException("Hub returned HTTP $code")
                     else -> return conn.inputStream.bufferedReader().use { it.readText() }
                 }
@@ -709,6 +719,7 @@ class WiserHub(host: String, private val secret: String) {
         val DAYS = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
         private val BASE_PATHS = listOf("/data/v2/domain/", "/data/domain/")
+        private const val SECRET_REJECTED = "The hub rejected the secret"
         private const val SCHEDULES_PATH = "/data/v2/schedules/"
         private const val CANCEL_OVERRIDE = """{"RequestOverride":{"Type":"None"}}"""
         const val HOT_WATER_ON = 1100
