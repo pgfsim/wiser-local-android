@@ -153,9 +153,10 @@ script in the returned page. A change to that page could break it.
   been tried against a real hub. Neither have room and schedule management,
   adding a device, device lock and identify, or the clock settings; those
   requests are taken from the reference library.
-- A Moment made or changed here does one thing: sets one room, or turns the
-  hot water on, off or on for a set time. Moments with several actions, room
-  boosts, and other device types are left to the official app.
+- A Moment made or changed here can have up to 60 actions, each setting a room
+  or turning the hot water on, off or on for a set time. Room boosts, waits and
+  other device types are left to the official app; a Moment using them can be
+  run, renamed or deleted here but not edited.
 - The time zone offset is assumed to be in minutes from UTC.
 - Whether a firmware update is pending is not shown, because the hub's data
   does not say so clearly.

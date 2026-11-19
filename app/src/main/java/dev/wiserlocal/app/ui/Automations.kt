@@ -84,12 +84,14 @@ fun AutomationsTab(vm: HubViewModel, modifier: Modifier) {
                 if (state.moments.isEmpty()) item { EmptyNote("No Moments yet. Tap + to add one.") }
                 state.moments.forEach { moment ->
                     item(key = "m${moment.id}") {
-                        val described = vm.momentActions[moment.id]?.let { describeAction(it, state) }
+                        val described = vm.momentActions[moment.id]?.joinToString(" · ") { action ->
+                            describeAction(action, state).let { (target, value) -> "$target: $value" }
+                        }
                         ListCard(
                             icon = painterResource(R.drawable.ic_moment),
                             title = moment.name,
                             detail = when {
-                                described != null -> "${described.first}: ${described.second}"
+                                described != null -> described
                                 moment.id in vm.momentActions -> "Set up in the official app"
                                 else -> null
                             },

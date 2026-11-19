@@ -52,9 +52,6 @@ import dev.wiserlocal.app.MomentAction
 import dev.wiserlocal.app.R
 import dev.wiserlocal.app.WiserHub
 
-/** How many actions this app can save in one Moment until the multi-action format is known. */
-private const val SAVABLE_ACTIONS = 1
-
 /** Create or edit a Moment: its name at the top, its actions below. */
 @Composable
 fun MomentEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, momentId: Int?) {
@@ -72,24 +69,26 @@ fun MomentEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, momentId: 
     val actions = remember { mutableStateListOf<MomentAction>() }
     var loaded by remember { mutableStateOf(momentId == null) }
     var unknown by remember { mutableStateOf(false) }
-    var original by remember { mutableStateOf<MomentAction?>(null) }
+    var original by remember { mutableStateOf<List<MomentAction>>(emptyList()) }
 
-    // Fill in the Moment's action once the hub has told us what it is.
+    // Fill in the Moment's actions once the hub has told us what they are.
     LaunchedEffect(vm.momentActions, moment) {
         if (loaded || moment == null || moment.id !in vm.momentActions) return@LaunchedEffect
         if (name.isEmpty()) name = moment.name
-        val action = vm.momentActions[moment.id]
-        original = action
-        if (action == null) unknown = true else actions.add(action)
+        val loadedActions = vm.momentActions[moment.id]
+        if (loadedActions == null) unknown = true else {
+            original = loadedActions
+            actions.addAll(loadedActions)
+        }
         loaded = true
     }
 
     val nameChanged = moment != null && name.trim() != moment.name
-    val actionChanged = actions.toList() != listOfNotNull(original)
+    val actionChanged = actions.toList() != original
     val dirty = if (moment == null) name.isNotBlank() || actions.isNotEmpty() else nameChanged || actionChanged
     val canSave = loaded && name.isNotBlank() && when {
         unknown -> nameChanged
-        else -> actions.size == SAVABLE_ACTIONS && (moment == null || dirty)
+        else -> actions.isNotEmpty() && (moment == null || dirty)
     }
 
     fun leave() {
@@ -102,11 +101,11 @@ fun MomentEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, momentId: 
         val newName = name.trim()
         when {
             moment == null -> vm.run("Moment “$newName” added", onSuccess = { nav.pop() }) {
-                it.createMoment(newName, actions.first())
+                it.createMoment(newName, actions.toList())
             }
             unknown -> vm.run("Moment renamed", onSuccess = { nav.pop() }) { it.renameMoment(moment.id, newName) }
             else -> vm.run("Moment saved", onSuccess = { nav.pop() }) {
-                it.updateMoment(moment.copy(name = newName), actions.first())
+                it.updateMoment(moment.copy(name = newName), actions.toList())
             }
         }
     }
@@ -129,7 +128,7 @@ fun MomentEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, momentId: 
                     onClick = {
                         if (state != null) pickMomentAction(dialogs, state, null) { actions.add(it) }
                     },
-                    enabled = loaded && !unknown && actions.size < SAVABLE_ACTIONS && state != null,
+                    enabled = loaded && !unknown && actions.size < MAX_MOMENT_ACTIONS && state != null,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
@@ -194,7 +193,7 @@ fun MomentEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, momentId: 
                 !loaded -> Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 unknown -> NoteCard(
                     "This Moment was set up in the official app and does something this app can't show " +
-                        "or change yet, such as several actions or a room boost. You can still rename, run or delete it here.",
+                        "or change yet, such as a room boost. You can still rename, run or delete it here.",
                 )
                 actions.isEmpty() -> Text(
                     "No actions yet. Tap Add action to choose what this Moment does.",
@@ -211,15 +210,6 @@ fun MomentEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, momentId: 
                         onRemove = { actions.removeAt(index) },
                     )
                 }
-            }
-
-            if (actions.size >= SAVABLE_ACTIONS && !unknown) {
-                Text(
-                    "This app can save one action per Moment for now. Moments with several actions " +
-                        "can be made in the official app.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         }
     }

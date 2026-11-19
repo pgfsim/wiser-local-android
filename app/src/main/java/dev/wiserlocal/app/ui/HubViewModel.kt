@@ -43,7 +43,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
     var schedules by mutableStateOf<List<Schedule>>(emptyList()); private set
 
     /** What each Moment does, by Moment id; null where this app cannot describe it. */
-    var momentActions by mutableStateOf<Map<Int, MomentAction?>>(emptyMap()); private set
+    var momentActions by mutableStateOf<Map<Int, List<MomentAction>?>>(emptyMap()); private set
     var network by mutableStateOf<List<Pair<String, String>>>(emptyList()); private set
     var openTherm by mutableStateOf<List<Pair<String, String>>>(emptyList()); private set
 
@@ -90,7 +90,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
     private class Loaded(
         val state: HubState,
         val schedules: List<Schedule>,
-        val momentActions: Map<Int, MomentAction?>?,
+        val momentActions: Map<Int, List<MomentAction>?>?,
         val network: List<Pair<String, String>>?,
         val openTherm: List<Pair<String, String>>?,
     )
@@ -128,7 +128,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                 // Schedules only add "next change" lines, so a failure here is not fatal.
                 val schedules = try { hub.fetchSchedules() } catch (e: Exception) { emptyList() }
                 val actions = if (moments) {
-                    state.moments.associate { m -> m.id to try { hub.fetchMomentAction(m.id) } catch (e: Exception) { null } }
+                    state.moments.associate { m -> m.id to try { hub.fetchMomentActions(m.id) } catch (e: Exception) { null } }
                 } else null
                 val net = if (system) try { hub.fetchNetwork() } catch (e: Exception) { emptyList() } else null
                 // Boiler readings only exist when the hub is wired over OpenTherm.

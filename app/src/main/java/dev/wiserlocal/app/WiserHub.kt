@@ -1,7 +1,9 @@
 package dev.wiserlocal.app
 
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
+import org.json.JSONTokener
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -106,7 +108,7 @@ data class Device(
 data class Moment(val id: Int, val name: String, val iconId: Int = 0)
 
 /**
- * One thing a new Moment does: put a room or the hot water on a manual setting.
+ * One thing a Moment does: put a room or the hot water on a manual setting.
  * [domain] is "Room" or "HotWater"; [setPoint] is in tenths of a degree
  * ([WiserHub.SCHEDULE_OFF] for off, 1100 for hot water on).
  */
@@ -425,24 +427,28 @@ class WiserHub(host: String, private val secret: String) {
 
     /**
      * Creates a Moment, in the format the official app uses: name and icon in the
-     * query string, the action in the body with its override as a JSON string.
+     * query string, one action per line in the body, each override as a JSON string.
      */
-    fun createMoment(name: String, action: MomentAction) {
-        request("POST", "Moment?" + momentQuery(name, 0), momentBody(action))
+    fun createMoment(name: String, actions: List<MomentAction>) {
+        request("POST", "Moment?" + momentQuery(name, 0), momentBody(actions))
     }
 
     /**
-     * What a Moment does, read with GET Moment/{id}. Null when it is something
-     * this app cannot describe (for example a room boost, or several actions).
+     * What a Moment does, read with GET Moment/{id}. Null when any part of it is
+     * something this app cannot describe (for example a room boost or a wait), so
+     * that saving from this app never drops what the official app set up.
      */
-    fun fetchMomentAction(momentId: Int): MomentAction? {
-        val text = request("GET", "Moment/$momentId", null).trim()
-        val json = when {
-            text.startsWith("{") -> JSONObject(text)
-            text.startsWith("[") -> JSONArray(text).takeIf { it.length() == 1 }?.optJSONObject(0)
-            else -> null
-        } ?: return null
+    fun fetchMomentActions(momentId: Int): List<MomentAction>? {
+        val objects = momentObjects(request("GET", "Moment/$momentId", null)) ?: return null
+        if (objects.isEmpty()) return null
+        return objects.map { parseMomentAction(it) ?: return null }
+    }
+
+    private fun parseMomentAction(json: JSONObject): MomentAction? {
         if (json.optString("Action") != "RequestOverride") return null
+        // Extras the official app sends as null; anything set there is beyond this app.
+        if (json.has("Wait") && !json.isNull("Wait")) return null
+        if (json.has("EnableNotification") && !json.isNull("EnableNotification") && json.optBoolean("EnableNotification")) return null
         val value = json.optString("Value").takeIf { it.startsWith("{") }?.let { JSONObject(it) } ?: return null
         if (!value.optString("type").equals("Manual", ignoreCase = true) || !value.has("setPoint")) return null
         return MomentAction(
@@ -453,25 +459,54 @@ class WiserHub(host: String, private val secret: String) {
         )
     }
 
+    /**
+     * The action objects in a Moment response. The official app sends them one per
+     * line, so the hub may answer the same way; a JSON array or a single object is
+     * accepted too. Null when the response is not something recognisable.
+     */
+    private fun momentObjects(text: String): List<JSONObject>? {
+        val out = mutableListOf<JSONObject>()
+        val tokener = JSONTokener(text)
+        try {
+            while (true) {
+                if (tokener.nextClean() == 0.toChar()) break
+                tokener.back()
+                when (val value = tokener.nextValue()) {
+                    is JSONObject -> out += value
+                    is JSONArray -> for (i in 0 until value.length()) out += value.optJSONObject(i) ?: return null
+                    else -> return null
+                }
+            }
+        } catch (e: JSONException) {
+            return null
+        }
+        return out
+    }
+
     /** Replaces what a Moment does, keeping its name and icon, as the official app does. */
-    fun updateMoment(moment: Moment, action: MomentAction) {
-        request("PATCH", "Moment/${moment.id}?" + momentQuery(moment.name, moment.iconId), momentBody(action))
+    fun updateMoment(moment: Moment, actions: List<MomentAction>) {
+        request("PATCH", "Moment/${moment.id}?" + momentQuery(moment.name, moment.iconId), momentBody(actions))
     }
 
     private fun momentQuery(name: String, iconId: Int) =
         // Spaces go as "+", exactly as the official app sends them, so both apps read the name back the same way.
         "Name=" + URLEncoder.encode(name, "UTF-8") + "&IconId=$iconId"
 
-    /** The action, with its override as a JSON string inside "Value". */
-    private fun momentBody(action: MomentAction): String {
+    /**
+     * The actions one per line (CRLF, which matches the length the official app sent),
+     * each with its override as a JSON string inside "Value".
+     */
+    private fun momentBody(actions: List<MomentAction>): String = actions.joinToString("\r\n") { action ->
         val override = JSONObject().put("type", "Manual").put("setPoint", action.setPoint)
         // A timed hot water boost; the official app adds the duration to the same override.
         action.durationMinutes?.let { override.put("durationMinutes", it) }
-        return JSONObject()
+        JSONObject()
             .put("Domain", action.domain)
             .put("Id", action.id)
             .put("Action", "RequestOverride")
             .put("Value", override.toString())
+            .put("Wait", JSONObject.NULL)
+            .put("EnableNotification", JSONObject.NULL)
             .toString()
     }
 
