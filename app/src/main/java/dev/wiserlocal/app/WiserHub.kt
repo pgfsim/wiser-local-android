@@ -105,6 +105,27 @@ data class Device(
 )
 
 /** A scene set up in the official app, which the hub can run on request. */
+/** True when the boiler type is OpenTherm rather than Standard (relay). */
+val SystemInfo.usesOpenTherm: Boolean
+    get() = boiler.any { (key, value) -> key == "ControlType" && value.contains("OpenTherm") }
+
+/** A boiler setting sent over OpenTherm, in °C, with the range the boiler accepts. */
+data class OpenThermSetpoint(val valueC: Double?, val minC: Double, val maxC: Double)
+
+/** What the hub's OpenTherm block reports; only filled in once OpenTherm is chosen as the boiler type. */
+data class OpenThermInfo(
+    /** Readings from the boiler as (label, value) pairs; empty unless it answers over OpenTherm. */
+    val readings: List<Pair<String, String>>,
+    /** "Domestic Hot Water Setpoint" in the official app. */
+    val hotWater: OpenThermSetpoint,
+    /** "Max. Central Heating Water Temperature" in the official app. */
+    val maxHeating: OpenThermSetpoint,
+) {
+    companion object {
+        val NONE = OpenThermInfo(emptyList(), OpenThermSetpoint(null, 35.0, 55.0), OpenThermSetpoint(null, 35.0, 80.0))
+    }
+}
+
 data class Moment(val id: Int, val name: String, val iconId: Int = 0)
 
 /**
@@ -586,14 +607,52 @@ class WiserHub(host: String, private val secret: String) {
     }
 
     /**
-     * Boiler readings as (label, value) pairs. Only has content when the hub is
-     * wired to the boiler over OpenTherm; otherwise the list is empty.
+     * The hub's OpenTherm block: boiler readings (only while the boiler answers over
+     * OpenTherm) and the two settings the official app's OpenTherm Settings screen shows.
      */
-    fun fetchOpenTherm(): List<Pair<String, String>> {
-        val text = attempt("GET", "/data/v2/opentherm/", null)
-            ?: attempt("GET", "/data/v2/openTherm/", null)
-            ?: return emptyList()
+    fun fetchOpenTherm(): OpenThermInfo {
+        val text = attempt("GET", "/data/v2/openTherm/", null)
+            ?: attempt("GET", "/data/v2/opentherm/", null)
+            ?: return OpenThermInfo.NONE
         val json = JSONObject(text)
+        val params = json.optJSONObject("preDefinedRemoteBoilerParameters") ?: JSONObject()
+        fun setpoint(key: String, fallback: OpenThermSetpoint): OpenThermSetpoint {
+            val min = fromHub(params.optInt(key + "LowerBound", NO_READING))
+            val max = fromHub(params.optInt(key + "UpperBound", NO_READING))
+            return OpenThermSetpoint(
+                fromHub(params.optInt(key, NO_READING)),
+                if (min != null && max != null && min < max) min else fallback.minC,
+                if (min != null && max != null && min < max) max else fallback.maxC,
+            )
+        }
+        // Without limits from the boiler, the hub's own heating flow range is the next best guide.
+        val flowMin = fromHub(json.optInt("chFlowActiveLowerSetpoint", NO_READING))
+        val flowMax = fromHub(json.optInt("chFlowActiveUpperSetpoint", NO_READING))
+        val heatingFallback = if (flowMin != null && flowMax != null && flowMin < flowMax) {
+            OpenThermSetpoint(null, flowMin, flowMax)
+        } else OpenThermInfo.NONE.maxHeating
+        return OpenThermInfo(
+            readings = openThermReadings(json),
+            hotWater = setpoint("dhwSetpoint", OpenThermInfo.NONE.hotWater),
+            maxHeating = setpoint("maxChSetpoint", heatingFallback),
+        )
+    }
+
+    /** "Domestic Hot Water Setpoint", in °C. Sent the way the Home Assistant integration does. */
+    fun setOpenThermHotWater(tempC: Double) = setOpenThermParameter("dhwSetpoint", tempC)
+
+    /** "Max. Central Heating Water Temperature", in °C. */
+    fun setOpenThermMaxHeating(tempC: Double) = setOpenThermParameter("maxChSetpoint", tempC)
+
+    private fun setOpenThermParameter(key: String, tempC: Double) {
+        val body = """{"$key":${(tempC * 10).roundToInt()}}"""
+        // Newer firmware spells it openTherm; older firmware opentherm.
+        attempt("PATCH", "/data/v2/openTherm/preDefinedRemoteBoilerParameters", body)
+            ?: attempt("PATCH", "/data/v2/opentherm/preDefinedRemoteBoilerParameters", body)
+            ?: throw IOException("This hub does not offer OpenTherm settings")
+    }
+
+    private fun openThermReadings(json: JSONObject): List<Pair<String, String>> {
         val live = json.optJSONObject("operationalData") ?: json
         val counters = json.optJSONObject("extendedDiagnostics") ?: json
         val out = mutableListOf<Pair<String, String>>()

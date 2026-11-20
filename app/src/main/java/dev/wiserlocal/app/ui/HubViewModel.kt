@@ -26,7 +26,9 @@ import dev.wiserlocal.app.ReportRange
 import dev.wiserlocal.app.WiserCloud
 import dev.wiserlocal.app.WiserInsights
 import java.time.LocalDate
+import dev.wiserlocal.app.OpenThermInfo
 import dev.wiserlocal.app.WiserHub
+import dev.wiserlocal.app.usesOpenTherm
 import java.io.IOException
 import java.util.concurrent.Executors
 
@@ -49,7 +51,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
     /** What each automation does, by id; null where the hub's answer could not be read. */
     var automationDetails by mutableStateOf<Map<Int, AutomationDetail?>>(emptyMap()); private set
     var network by mutableStateOf<List<Pair<String, String>>>(emptyList()); private set
-    var openTherm by mutableStateOf<List<Pair<String, String>>>(emptyList()); private set
+    var openTherm by mutableStateOf(OpenThermInfo.NONE); private set
 
     var loading by mutableStateOf(false); private set
     var error by mutableStateOf<String?>(null); private set
@@ -97,7 +99,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
         val momentActions: Map<Int, List<MomentAction>?>?,
         val automationDetails: Map<Int, AutomationDetail?>?,
         val network: List<Pair<String, String>>?,
-        val openTherm: List<Pair<String, String>>?,
+        val openTherm: OpenThermInfo?,
     )
 
     fun refresh() = run()
@@ -139,10 +141,10 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                     state.automations.associate { a -> a.id to try { hub.fetchAutomation(a.id) } catch (e: Exception) { null } }
                 } else null
                 val net = if (system) try { hub.fetchNetwork() } catch (e: Exception) { emptyList() } else null
-                // Boiler readings only exist when the hub is wired over OpenTherm.
-                val boiler = if (system && state.system.openTherm == "Connected") {
-                    try { hub.fetchOpenTherm() } catch (e: Exception) { emptyList() }
-                } else if (system) emptyList() else null
+                // OpenTherm settings and readings only matter once OpenTherm is the boiler type.
+                val boiler = if (system && (state.system.openTherm == "Connected" || state.system.usesOpenTherm)) {
+                    try { hub.fetchOpenTherm() } catch (e: Exception) { OpenThermInfo.NONE }
+                } else if (system) OpenThermInfo.NONE else null
                 Loaded(state, schedules, actions, automations, net, boiler)
             }
             main.post {

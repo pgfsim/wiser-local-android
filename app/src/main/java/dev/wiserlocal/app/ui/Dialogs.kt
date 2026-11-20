@@ -138,12 +138,19 @@ fun DialogHost.prompt(title: String, initial: String, numeric: Boolean = false, 
  * Picks a temperature in tenths of a degree, in 0.5° steps. With [allowOff],
  * stepping below the minimum gives [WiserHub.SCHEDULE_OFF].
  */
-fun DialogHost.temperature(title: String, initial: Int, allowOff: Boolean = false, onOk: (Int) -> Unit) = show {
+fun DialogHost.temperature(
+    title: String,
+    initial: Int,
+    allowOff: Boolean = false,
+    minTenths: Int = MIN_TENTHS,
+    maxTenths: Int = MAX_TENTHS,
+    onOk: (Int) -> Unit,
+) = show {
     var value by remember { mutableIntStateOf(initial) }
     AlertDialog(
         onDismissRequest = ::close,
         title = { Text(title) },
-        text = { TempStepper(value, allowOff) { value = it } },
+        text = { TempStepper(value, allowOff, minTenths, maxTenths) { value = it } },
         confirmButton = { TextButton(onClick = { close(); onOk(value) }) { Text("OK") } },
         dismissButton = { TextButton(onClick = ::close) { Text("Cancel") } },
     )
@@ -195,14 +202,20 @@ private const val MIN_TENTHS = 50
 private const val MAX_TENTHS = 300
 
 @Composable
-fun TempStepper(value: Int, allowOff: Boolean, onChange: (Int) -> Unit) {
+fun TempStepper(
+    value: Int,
+    allowOff: Boolean,
+    minTenths: Int = MIN_TENTHS,
+    maxTenths: Int = MAX_TENTHS,
+    onChange: (Int) -> Unit,
+) {
     val off = value == WiserHub.SCHEDULE_OFF
     fun step(delta: Int) {
         val next = when {
-            off && delta > 0 -> MIN_TENTHS
+            off && delta > 0 -> minTenths
             off -> WiserHub.SCHEDULE_OFF
-            allowOff && value + delta < MIN_TENTHS -> WiserHub.SCHEDULE_OFF
-            else -> (value + delta).coerceIn(MIN_TENTHS, MAX_TENTHS)
+            allowOff && value + delta < minTenths -> WiserHub.SCHEDULE_OFF
+            else -> (value + delta).coerceIn(minTenths, maxTenths)
         }
         onChange(next)
     }

@@ -26,6 +26,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -46,6 +48,9 @@ import dev.wiserlocal.app.BuildConfigInfo
 import dev.wiserlocal.app.Device
 import dev.wiserlocal.app.R
 import dev.wiserlocal.app.WiserHub
+import kotlin.math.roundToInt
+import dev.wiserlocal.app.OpenThermSetpoint
+import dev.wiserlocal.app.usesOpenTherm
 import java.util.Locale
 
 /** The gear menu: hub, rooms, devices and system settings, then app options. */
@@ -466,10 +471,10 @@ fun SystemSettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
         SettingsColumn(padding) {
             val system = vm.state?.system ?: return@SettingsColumn
             Section("Hub") {
-                val rows = buildList<Triple<String, String?, (() -> Unit)?>> {
-                    add(Triple("Firmware", system.firmware, null))
-                    add(Triple("Cloud connection", system.cloudConnected?.let { if (it) "Connected" else "Not connected" }, null))
-                    vm.network.forEach { (label, value) -> add(Triple(label, value, null)) }
+                val rows = buildList<HubRow> {
+                    add(HubRow("Firmware", system.firmware))
+                    add(HubRow("Cloud connection", system.cloudConnected?.let { if (it) "Connected" else "Not connected" }))
+                    vm.network.forEach { (label, value) -> add(HubRow(label, value)) }
                     system.boiler.forEach { (key, value) ->
                         val (label, shown) = boilerRow(key, value)
                         val onClick: (() -> Unit)? = when (key) {
@@ -495,14 +500,23 @@ fun SystemSettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                             }
                             else -> null
                         }
-                        add(Triple(label, shown, onClick))
+                        // The official app flags OpenTherm when the boiler doesn't answer over it.
+                        val unanswered = key == "ControlType" && system.usesOpenTherm && system.openTherm != "Connected"
+                        add(HubRow(label, if (unanswered) "$shown · the boiler is not answering over OpenTherm" else shown, onClick, warning = unanswered))
                     }
-                    add(Triple("Brand", system.brand, null))
-                    add(Triple("OpenTherm link to boiler", system.openTherm, null))
-                }.filter { it.second != null }
-                rows.forEachIndexed { index, (label, value, onClick) ->
+                    add(HubRow("Brand", system.brand))
+                    add(HubRow("OpenTherm link to boiler", system.openTherm))
+                }.filter { it.value != null }
+                rows.forEachIndexed { index, row ->
                     if (index > 0) RowDivider()
-                    InfoRow(label, value, showChevron = onClick != null, onClick = onClick)
+                    InfoRow(
+                        row.label,
+                        row.value,
+                        icon = if (row.warning) rememberVectorPainter(Icons.Default.Warning) else null,
+                        iconTint = MaterialTheme.colorScheme.error,
+                        showChevron = row.onClick != null,
+                        onClick = row.onClick,
+                    )
                 }
             }
             system.valveProtection?.let { enabled ->
@@ -530,9 +544,28 @@ fun SystemSettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                     }
                 }
             }
-            if (vm.openTherm.isNotEmpty()) {
+            if (system.usesOpenTherm) {
+                val ot = vm.openTherm
+                Section("OpenTherm settings") {
+                    Text(
+                        "Changes made on the boiler's front panel can take up to a minute to show here.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    )
+                    RowDivider()
+                    OpenThermRow("Hot water temperature", "Domestic hot water setpoint", ot.hotWater) { tempC ->
+                        vm.run { it.setOpenThermHotWater(tempC) }
+                    }
+                    RowDivider()
+                    OpenThermRow("Maximum heating water temperature", "Max. central heating water temperature", ot.maxHeating) { tempC ->
+                        vm.run { it.setOpenThermMaxHeating(tempC) }
+                    }
+                }
+            }
+            if (vm.openTherm.readings.isNotEmpty()) {
                 Section("Boiler") {
-                    vm.openTherm.forEachIndexed { index, (label, value) ->
+                    vm.openTherm.readings.forEachIndexed { index, (label, value) ->
                         if (index > 0) RowDivider()
                         InfoRow(label, value)
                     }
@@ -541,6 +574,22 @@ fun SystemSettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
         }
     }
 }
+
+/** One OpenTherm temperature setting; tap to change it within the boiler's range. */
+@Composable
+private fun OpenThermRow(title: String, dialogTitle: String, setpoint: OpenThermSetpoint, onSet: (Double) -> Unit) {
+    val dialogs = LocalDialogs.current
+    val min = (setpoint.minC * 10).roundToInt()
+    val max = (setpoint.maxC * 10).roundToInt()
+    InfoRow(title, setpoint.valueC?.let { WiserHub.formatTemp(it) } ?: "Not reported by the boiler", showChevron = true) {
+        val start = ((setpoint.valueC ?: setpoint.minC) * 10).roundToInt().coerceIn(min, max)
+        dialogs.temperature(dialogTitle, start, minTenths = min, maxTenths = max) { tenths ->
+            if (tenths != start || setpoint.valueC == null) onSet(tenths / 10.0)
+        }
+    }
+}
+
+private class HubRow(val label: String, val value: String?, val onClick: (() -> Unit)? = null, val warning: Boolean = false)
 
 private val BOILER_FUELS = setOf("Gas", "Oil", "Electric", "SolidFuel", "Biomass")
 
