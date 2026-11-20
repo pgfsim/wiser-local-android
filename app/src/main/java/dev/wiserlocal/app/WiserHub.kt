@@ -114,12 +114,37 @@ data class Moment(val id: Int, val name: String, val iconId: Int = 0)
  */
 data class MomentAction(val domain: String, val id: Int, val setPoint: Int, val durationMinutes: Int? = null)
 
+/** An automation as listed in the hub's domain data: name, icon and whether it is on. */
+data class Automation(val id: Int, val name: String, val iconId: Int, val enabled: Boolean, val notify: Boolean)
+
+/** What an automation does, read with GET /Automation/{id}. */
+data class AutomationDetail(
+    /** "All" or "Any": how the triggers combine. */
+    val triggerMode: String,
+    val triggers: List<AutomationTrigger>,
+    val times: List<AutomationTime>,
+    val actions: List<AutomationAction>,
+)
+
+/** "If [domain] [id]'s [property] [comparator] [compareTo]", e.g. HotWater 2 WaterHeatingState Equals Off. */
+data class AutomationTrigger(val domain: String, val id: Int, val property: String, val comparator: String, val compareTo: String)
+
+/**
+ * A time condition. A period has [start] and [end]; a single time has only [start].
+ * Times are kept exactly as the hub sends them, as their encoding is not known yet.
+ */
+data class AutomationTime(val start: Int?, val end: Int?, val days: List<String>)
+
+/** One step: [action] on [domain] [id] with [value], usually a JSON string such as {"type":"Boost",...}. */
+data class AutomationAction(val domain: String, val id: Int, val action: String, val value: String)
+
 data class HubState(
     val rooms: List<Room>,
     val hotWater: HotWater?,
     val system: SystemInfo,
     val devices: List<Device>,
     val moments: List<Moment>,
+    val automations: List<Automation> = emptyList(),
 )
 
 /**
@@ -270,7 +295,16 @@ class WiserHub(host: String, private val secret: String) {
             moments += Moment(id, name, o.optInt("IconId", 0))
         }
 
-        return HubState(rooms, hotWater, system, devices, moments)
+        val automations = mutableListOf<Automation>()
+        json.optJSONArray("Automation").forEachObject { o ->
+            val id = o.optInt("id")
+            val name = o.optStringOrNull("Name")?.let { raw ->
+                try { URLDecoder.decode(raw, "UTF-8") } catch (e: IllegalArgumentException) { raw }
+            } ?: "Automation $id"
+            automations += Automation(id, name, o.optInt("IconId", 0), o.optBoolean("Enabled", true), o.optBoolean("EnableNotification", false))
+        }
+
+        return HubState(rooms, hotWater, system, devices, moments, automations)
     }
 
     fun setRoomTemp(roomId: Int, tempC: Double) {
@@ -430,7 +464,7 @@ class WiserHub(host: String, private val secret: String) {
      * query string, one action per line in the body, each override as a JSON string.
      */
     fun createMoment(name: String, actions: List<MomentAction>) {
-        momentRequest("POST", "Moment?" + momentQuery(name, 0), momentBody(actions))
+        rootRequest("POST", "Moment?" + momentQuery(name, 0), momentBody(actions))
     }
 
     /**
@@ -439,7 +473,7 @@ class WiserHub(host: String, private val secret: String) {
      * that saving from this app never drops what the official app set up.
      */
     fun fetchMomentActions(momentId: Int): List<MomentAction>? {
-        val objects = momentObjects(momentRequest("GET", "Moment/$momentId", null)) ?: return null
+        val objects = momentObjects(rootRequest("GET", "Moment/$momentId", null)) ?: return null
         if (objects.isEmpty()) return null
         return objects.map { parseMomentAction(it) ?: return null }
     }
@@ -485,7 +519,7 @@ class WiserHub(host: String, private val secret: String) {
 
     /** Replaces what a Moment does, keeping its name and icon, as the official app does. */
     fun updateMoment(moment: Moment, actions: List<MomentAction>) {
-        momentRequest("PATCH", "Moment/${moment.id}?" + momentQuery(moment.name, moment.iconId), momentBody(actions))
+        rootRequest("PATCH", "Moment/${moment.id}?" + momentQuery(moment.name, moment.iconId), momentBody(actions))
     }
 
     private fun momentQuery(name: String, iconId: Int) =
@@ -508,6 +542,60 @@ class WiserHub(host: String, private val secret: String) {
             .put("Wait", JSONObject.NULL)
             .put("EnableNotification", JSONObject.NULL)
             .toString()
+    }
+
+    /**
+     * What an automation does. Like Moments, this lives at the hub's root
+     * (GET /Automation/{id}), and the keys come back capitalised.
+     */
+    fun fetchAutomation(id: Int): AutomationDetail {
+        val json = JSONObject(rootRequest("GET", "Automation/$id", null))
+        fun JSONObject.str(key: String) = optStringOrNull(key) ?: optStringOrNull(key.replaceFirstChar { it.lowercase() })
+        fun JSONObject.arr(key: String) = optJSONArray(key) ?: optJSONArray(key.replaceFirstChar { it.lowercase() })
+        val triggers = mutableListOf<AutomationTrigger>()
+        json.arr("Triggers").forEachObject { t ->
+            val compare = t.optJSONObject("CompareTo") ?: t.optJSONObject("compareTo")
+            // CompareTo holds one typed value, e.g. {"StringValue":"Off"}.
+            val compareText = compare?.keys()?.asSequence()?.firstOrNull()?.let { compare.opt(it)?.toString() } ?: ""
+            triggers += AutomationTrigger(
+                domain = t.str("Domain") ?: "",
+                id = t.optInt("Id", t.optInt("id")),
+                property = t.str("Get") ?: "",
+                comparator = t.str("Comparator") ?: "",
+                compareTo = compareText,
+            )
+        }
+        val times = mutableListOf<AutomationTime>()
+        json.arr("TimeConstraints").forEachObject { c ->
+            fun int(key: String) = when {
+                c.has(key) -> c.optInt(key)
+                c.has(key.replaceFirstChar { it.lowercase() }) -> c.optInt(key.replaceFirstChar { it.lowercase() })
+                else -> null
+            }
+            val days = c.optJSONObject("ActiveDays") ?: c.optJSONObject("activeDays")
+            times += AutomationTime(
+                start = int("StartTime") ?: int("Time"),
+                end = int("EndTime"),
+                days = WiserHub.DAYS.filter { day -> days?.optBoolean(day) == true || days?.optBoolean(day.lowercase()) == true },
+            )
+        }
+        val actions = mutableListOf<AutomationAction>()
+        json.arr("Actions").forEachObject { a ->
+            actions += AutomationAction(
+                domain = a.str("Domain") ?: "",
+                id = a.optInt("Id", a.optInt("id")),
+                action = a.str("Action") ?: "",
+                value = a.str("Value") ?: "",
+            )
+        }
+        return AutomationDetail(json.str("TriggerMode") ?: "All", triggers, times, actions)
+    }
+
+    /** Turns an automation on or off, as the official app does: the bare true/false to its Enabled path. */
+    fun setAutomationEnabled(id: Int, enabled: Boolean) = patch("Automation/$id/Enabled", enabled.toString())
+
+    fun deleteAutomation(id: Int) {
+        request("DELETE", "Automation/$id", null)
     }
 
     fun deleteMoment(momentId: Int) {
@@ -693,11 +781,11 @@ class WiserHub(host: String, private val secret: String) {
     }
 
     /**
-     * What a Moment does lives at the hub's root (/Moment/3, /Moment?Name=..), where
-     * the official app sends it; /data/v2/domain/Moment only holds names and icons.
+     * What a Moment or automation does lives at the hub's root (/Moment/3, /Automation/1), where
+     * the official app sends it; /data/v2/domain/ only holds names, icons and on/off.
      * Falls back to the domain path for firmware without the root one.
      */
-    private fun momentRequest(method: String, path: String, body: String?): String =
+    private fun rootRequest(method: String, path: String, body: String?): String =
         attempt(method, "/$path", body) ?: request(method, path, body)
 
     private fun request(method: String, path: String, body: String?): String {

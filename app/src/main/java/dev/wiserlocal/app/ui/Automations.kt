@@ -20,6 +20,7 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -104,8 +105,33 @@ fun AutomationsTab(vm: HubViewModel, modifier: Modifier) {
                     }
                 }
             }
-            1 -> item {
-                EmptyNote("Automations (actions triggered by sensors or times) aren't supported yet.")
+            1 -> {
+                if (state.automations.isEmpty()) {
+                    item { EmptyNote("No automations on the hub. For now, make them in the official app; they will show here.") }
+                }
+                state.automations.forEach { automation ->
+                    item(key = "a${automation.id}") {
+                        val detail = vm.automationDetails[automation.id]
+                        ListCard(
+                            icon = painterResource(R.drawable.ic_automation),
+                            title = automation.name,
+                            detail = when {
+                                detail != null -> automationSummary(detail, state)
+                                automation.id in vm.automationDetails -> "Set up in the official app"
+                                else -> null
+                            },
+                            onClick = { nav.push(Screen.AutomationDetail(automation.id)) },
+                        ) {
+                            Switch(
+                                checked = automation.enabled,
+                                onCheckedChange = { on ->
+                                    vm.run(if (on) "Automation on" else "Automation off") { it.setAutomationEnabled(automation.id, on) }
+                                },
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+                    }
+                }
             }
             else -> {
                 val heating = vm.schedules.filter { it.heating }

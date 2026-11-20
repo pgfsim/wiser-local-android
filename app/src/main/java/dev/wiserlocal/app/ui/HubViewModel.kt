@@ -15,6 +15,7 @@ import dev.wiserlocal.app.CloudStore
 import dev.wiserlocal.app.Device
 import dev.wiserlocal.app.HubState
 import dev.wiserlocal.app.MomentAction
+import dev.wiserlocal.app.AutomationDetail
 import dev.wiserlocal.app.Prefs
 import dev.wiserlocal.app.Room
 import dev.wiserlocal.app.Schedule
@@ -44,6 +45,9 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
 
     /** What each Moment does, by Moment id; null where this app cannot describe it. */
     var momentActions by mutableStateOf<Map<Int, List<MomentAction>?>>(emptyMap()); private set
+
+    /** What each automation does, by id; null where the hub's answer could not be read. */
+    var automationDetails by mutableStateOf<Map<Int, AutomationDetail?>>(emptyMap()); private set
     var network by mutableStateOf<List<Pair<String, String>>>(emptyList()); private set
     var openTherm by mutableStateOf<List<Pair<String, String>>>(emptyList()); private set
 
@@ -91,6 +95,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
         val state: HubState,
         val schedules: List<Schedule>,
         val momentActions: Map<Int, List<MomentAction>?>?,
+        val automationDetails: Map<Int, AutomationDetail?>?,
         val network: List<Pair<String, String>>?,
         val openTherm: List<Pair<String, String>>?,
     )
@@ -130,12 +135,15 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                 val actions = if (moments) {
                     state.moments.associate { m -> m.id to try { hub.fetchMomentActions(m.id) } catch (e: Exception) { null } }
                 } else null
+                val automations = if (moments) {
+                    state.automations.associate { a -> a.id to try { hub.fetchAutomation(a.id) } catch (e: Exception) { null } }
+                } else null
                 val net = if (system) try { hub.fetchNetwork() } catch (e: Exception) { emptyList() } else null
                 // Boiler readings only exist when the hub is wired over OpenTherm.
                 val boiler = if (system && state.system.openTherm == "Connected") {
                     try { hub.fetchOpenTherm() } catch (e: Exception) { emptyList() }
                 } else if (system) emptyList() else null
-                Loaded(state, schedules, actions, net, boiler)
+                Loaded(state, schedules, actions, automations, net, boiler)
             }
             main.post {
                 inFlight--
@@ -153,6 +161,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                         state = loaded.state
                         schedules = loaded.schedules
                         loaded.momentActions?.let { momentActions = it }
+                        loaded.automationDetails?.let { automationDetails = it }
                         loaded.network?.let { network = it }
                         loaded.openTherm?.let { openTherm = it }
                         error = null
@@ -165,7 +174,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Also load each Moment's action while a screen that shows them is open. */
+    /** Also load what each Moment and automation does while a screen that shows them is open. */
     fun watchMoments(on: Boolean) {
         wantMoments = on
         if (on) refresh()
