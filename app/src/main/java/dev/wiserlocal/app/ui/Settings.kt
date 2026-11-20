@@ -396,7 +396,7 @@ fun deviceDetails(device: Device): List<String> = listOfNotNull(
         val volts = device.batteryVolts?.let { v -> String.format(Locale.getDefault(), " (%.1f V)", v) } ?: ""
         "Battery: ${spaced(it)}$volts"
     },
-    device.signal?.let { "Signal: ${spaced(it)}" },
+    device.signal?.let { "Signal: ${spaced(it)}" + (device.rssi?.let { r -> " ($r dBm)" } ?: "") },
     device.tempC?.let { temp ->
         val target = device.setPointC?.let { " · target ${WiserHub.formatSetPoint(it)}" } ?: ""
         "Reads ${WiserHub.formatTemp(temp)}$target"
@@ -412,7 +412,16 @@ fun DevicesScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
     DetailScaffold("Devices", snackbar, onBack = { nav.pop() }, loading = vm.loading) { padding ->
         SettingsColumn(padding) {
             val state = vm.state ?: return@SettingsColumn
-            state.devices.forEach { device -> DeviceSection(vm, state, device) }
+            Section {
+                state.devices.forEachIndexed { index, device ->
+                    if (index > 0) RowDivider()
+                    InfoRow(
+                        deviceName(device),
+                        deviceDetails(device).filterNot { it.startsWith("Firmware") }.take(2).joinToString("\n"),
+                        showChevron = true,
+                    ) { nav.push(Screen.DeviceDetails(device.id)) }
+                }
+            }
             Section {
                 InfoRow("Add a device", "Lets a new thermostat or radiator valve join the hub.", showChevron = true) {
                     dialogs.confirm(
@@ -426,25 +435,9 @@ fun DevicesScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
 }
 
 @Composable
-private fun DeviceSection(vm: HubViewModel, state: HubState, device: Device, withRoom: Boolean = true) {
-    Section {
-        InfoRow(deviceName(device, withRoom), deviceDetails(device).joinToString("\n"))
-        device.locked?.takeIf { state.features.deviceLock }?.let { locked ->
-            RowDivider()
-            SwitchRow("Device lock", "Locks the buttons on the device.", locked) { on ->
-                vm.run { it.setDeviceLock(device.id, on) }
-            }
-        }
-        if (device.type != "Controller") {
-            RowDivider()
-            InfoRow("Identify", "Makes the device flash so you can find it.", showChevron = true) { vm.identify(device) }
-        }
-    }
-}
-
-@Composable
 fun DeviceDetailsScreen(vm: HubViewModel, snackbar: SnackbarHostState, deviceId: Int) {
     val nav = LocalNav.current
+    val dialogs = LocalDialogs.current
     val device = vm.state?.devices?.firstOrNull { it.id == deviceId }
     DetailScaffold(device?.let { deviceName(it, withRoom = false) } ?: "Device", snackbar, onBack = { nav.pop() }, loading = vm.loading) { padding ->
         SettingsColumn(padding) {
@@ -453,7 +446,57 @@ fun DeviceDetailsScreen(vm: HubViewModel, snackbar: SnackbarHostState, deviceId:
                 Text("This device is no longer on the hub.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 return@SettingsColumn
             }
-            DeviceSection(vm, state, device)
+            val name = deviceName(device, withRoom = false)
+            val isHub = device.type == "Controller"
+
+            Section {
+                InfoRow(name, deviceDetails(device).filterNot { it.startsWith("Firmware") }.joinToString("\n").ifEmpty { null })
+            }
+
+            val lock = device.locked?.takeIf { state.features.deviceLock }
+            if (!isHub || lock != null) Section("Options") {
+                if (!isHub) {
+                    InfoRow("Location", device.roomName ?: "No room", showChevron = true) {
+                        val rooms = state.rooms
+                        val options = rooms.map { it.name } + "No room"
+                        val current = rooms.indexOfFirst { it.id == device.roomId }.takeIf { it >= 0 } ?: rooms.size
+                        dialogs.choice("Location", options, current) { picked ->
+                            val target = rooms.getOrNull(picked)
+                            if (target?.id == device.roomId) return@choice
+                            // A room has one room thermostat; don't silently push another one out.
+                            val otherStat = target?.let { t ->
+                                state.devices.firstOrNull { it.type == "RoomStat" && it.roomId == t.id && it.id != device.id }
+                            }
+                            if (device.type == "RoomStat" && otherStat != null) {
+                                dialogs.message("Room thermostat", "${target.name} already has a room thermostat. Move that one out of the room first.")
+                                return@choice
+                            }
+                            val done = target?.let { "$name moved to ${it.name}" } ?: "$name taken out of ${device.roomName}"
+                            vm.run(done) { it.moveDevice(state, device, target?.id) }
+                        }
+                    }
+                }
+                lock?.let { locked ->
+                    if (!isHub) RowDivider()
+                    SwitchRow("Device lock", "Locks the buttons on the device.", locked) { on ->
+                        vm.run { it.setDeviceLock(device.id, on) }
+                    }
+                }
+            }
+
+            device.firmware?.let { firmware ->
+                Section("About") { InfoRow("Firmware version", firmware) }
+            }
+
+            if (!isHub) Section {
+                InfoRow("Identify", "Makes the device flash so you can find it.", showChevron = true) { vm.identify(device) }
+                RowDivider()
+                InfoRow("Delete", "Removes the device from the hub. It has to be paired again to come back.") {
+                    dialogs.confirm("Remove this ${name.lowercase()} from the hub? It has to be paired again to come back.", "Delete") {
+                        vm.run("$name removed", onSuccess = { nav.pop() }) { it.removeDevice(device.id) }
+                    }
+                }
+            }
         }
     }
 }

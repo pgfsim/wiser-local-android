@@ -27,8 +27,8 @@ The app has four tabs, plus a settings page behind the gear icon:
 - **Settings:** hub connection (with automatic hub discovery), rooms (each
   with its device count; a room page to rename it, choose or edit its schedule,
   switch open window detection, see its devices and delete it), devices
-  (battery, signal, readings, firmware, button lock, identify, add a new
-  device), away mode (away temperature, whether hot water turns off too),
+  (a page each with battery, signal and readings, its room, button lock,
+  firmware, identify and delete; add a new device), away mode (away temperature, whether hot water turns off too),
   smart modes (eco, comfort), system settings (hub firmware, cloud and
   Wi-Fi details, changing the heat source and boiler type, OpenTherm hot water and
   heating water temperatures, hot water channel, legacy PowerTag energy mode, brand, OpenTherm, valve
@@ -108,6 +108,10 @@ in tenths of a degree.
 | Delete Moment | `DELETE Moment/{id}` |
 | Add a device | `PATCH System/RequestPermitJoin` `120` |
 | Lock / identify device | `PATCH Device/{id}` `{"DeviceLockEnabled":true}` / `{"Identify":true}` (`false` to stop) |
+| Move room thermostat | `DELETE Room/{old}/RoomStatId`, then `PATCH Room/{new}/` `{"RoomStatId":id}` |
+| Move radiator valve | `PATCH Room/{old}/` `{"SmartValveIds":[…without it]}`, then `PATCH Room/{new}/` `{"SmartValveIds":[…with it]}` |
+| Move other device | `PATCH Device/{id}` `{"RoomId":room}`; out of its room: `DELETE Device/{id}/RoomId` |
+| Delete device | `DELETE Device/{id}/` |
 | Hub Wi-Fi details | `GET /data/v2/network/` |
 | Boiler readings | `GET /data/v2/opentherm/` |
 | Rename / delete schedule | `PATCH` or `DELETE /data/v2/schedules/Heating/{id}` (`{"Name":"Weekend"}`) |

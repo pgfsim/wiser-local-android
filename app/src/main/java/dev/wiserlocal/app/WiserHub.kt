@@ -105,6 +105,8 @@ data class Device(
     val battery: String?,
     val batteryVolts: Double?,
     val signal: String?,
+    /** Signal strength at the hub in dBm (ReceptionOfController.Rssi), if reported. */
+    val rssi: Int? = null,
     val firmware: String?,
     /** Whether the device's own buttons are locked, or null if it has none. */
     val locked: Boolean?,
@@ -303,6 +305,7 @@ class WiserHub(host: String, private val secret: String) {
                 battery = o.optStringOrNull("BatteryLevel"),
                 batteryVolts = if (o.has("BatteryVoltage")) o.optInt("BatteryVoltage") / 10.0 else null,
                 signal = o.optStringOrNull("DisplayedSignalStrength"),
+                rssi = o.optJSONObject("ReceptionOfController")?.takeIf { it.has("Rssi") }?.optInt("Rssi"),
                 firmware = o.optStringOrNull("ActiveFirmwareVersion"),
                 locked = o.optBooleanOrNull("DeviceLockEnabled"),
                 tempC = readings[id]?.let { fromHub(it.optInt("MeasuredTemperature", NO_READING)) },
@@ -472,6 +475,39 @@ class WiserHub(host: String, private val secret: String) {
         patch("Device/$deviceId", """{"DeviceLockEnabled":$locked}""")
 
     /** Starts or stops the device flashing so it can be told apart from others. */
+    /**
+     * Moves [device] into the room [toRoomId], or out of its room when null. The hub keeps
+     * this on the room for heating devices (RoomStatId, SmartValveIds) and on the device for
+     * the rest (RoomId), so take it out of the old room first, then add it to the new one.
+     */
+    fun moveDevice(state: HubState, device: Device, toRoomId: Int?) {
+        val fromRoomId = device.roomId
+        if (fromRoomId == toRoomId) return
+        when (device.type) {
+            "RoomStat" -> {
+                if (fromRoomId != null) request("DELETE", "Room/$fromRoomId/RoomStatId", null)
+                if (toRoomId != null) patch("Room/$toRoomId/", """{"RoomStatId":${device.id}}""")
+            }
+            "iTRV" -> {
+                fun valves(roomId: Int) = state.devices.filter { it.type == "iTRV" && it.roomId == roomId }.map { it.id }
+                if (fromRoomId != null) setRoomValves(fromRoomId, valves(fromRoomId) - device.id)
+                if (toRoomId != null) setRoomValves(toRoomId, valves(toRoomId) + device.id)
+            }
+            else -> {
+                if (toRoomId != null) patch("Device/${device.id}", """{"RoomId":$toRoomId}""")
+                else request("DELETE", "Device/${device.id}/RoomId", null)
+            }
+        }
+    }
+
+    private fun setRoomValves(roomId: Int, ids: List<Int>) =
+        patch("Room/$roomId/", JSONObject().put("SmartValveIds", JSONArray(ids)).toString())
+
+    /** Removes the device from the hub entirely; it has to be paired again to come back. */
+    fun removeDevice(deviceId: Int) {
+        request("DELETE", "Device/$deviceId/", null)
+    }
+
     fun identifyDevice(deviceId: Int, on: Boolean) = patch("Device/$deviceId", """{"Identify":$on}""")
 
     /** The hub's Wi-Fi details as (label, value) pairs; empty if it does not report them. */
