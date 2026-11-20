@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+  <title>Temperature and humidity</title>
+  <path d="M6.5,15.4V4.5a1.5,1.5 0 0,1 3,0V15.4A3,3 0 1,1 6.5,15.4zM8,18V13"/>
+  <path d="M17,8.3C15.25,11.1 13.5,13.9 13.5,16A3.5,3.5 0 0,0 20.5,16C20.5,13.9 18.75,11.1 17,8.3z"/>
+</svg>

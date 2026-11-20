@@ -36,6 +36,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -48,6 +49,7 @@ import dev.wiserlocal.app.AutomationDetail
 import dev.wiserlocal.app.AutomationTime
 import dev.wiserlocal.app.AutomationTrigger
 import dev.wiserlocal.app.HubState
+import dev.wiserlocal.app.R
 import dev.wiserlocal.app.WiserHub
 import org.json.JSONObject
 
@@ -73,6 +75,7 @@ fun AutomationEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, automa
     }
 
     var name by remember { mutableStateOf(automation?.name ?: "") }
+    var iconId by remember { mutableIntStateOf(automation?.iconId ?: 0) }
     var triggerMode by remember { mutableStateOf("All") }
     val triggers = remember { mutableStateListOf<AutomationTrigger>() }
     val times = remember { mutableStateListOf<AutomationTime>() }
@@ -84,7 +87,10 @@ fun AutomationEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, automa
     // Fill in the automation once the hub has said what it does.
     LaunchedEffect(vm.automationDetails, automation) {
         if (loaded || automation == null || automation.id !in vm.automationDetails) return@LaunchedEffect
-        if (name.isEmpty()) name = automation.name
+        if (name.isEmpty()) {
+            name = automation.name
+            iconId = automation.iconId
+        }
         val detail = vm.automationDetails[automation.id]
         if (detail == null) unreadable = true else {
             original = detail
@@ -97,7 +103,7 @@ fun AutomationEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, automa
     }
 
     val current = AutomationDetail(triggerMode, triggers.toList(), times.toList(), actions.toList())
-    val nameChanged = automation != null && name.trim() != automation.name
+    val nameChanged = automation != null && (name.trim() != automation.name || iconId != automation.iconId)
     val partsChanged = automation == null && (triggers.isNotEmpty() || times.isNotEmpty() || actions.isNotEmpty()) ||
         original != null && current != original
     val dirty = if (automation == null) name.isNotBlank() || partsChanged else nameChanged || partsChanged
@@ -114,7 +120,7 @@ fun AutomationEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, automa
     fun save() {
         val newName = name.trim()
         vm.run(if (automation == null) "Automation “$newName” added" else "Automation saved", onSuccess = { nav.pop() }) {
-            it.saveAutomation(automation?.id, newName, automation?.enabled ?: true, automation?.iconId ?: 0, current)
+            it.saveAutomation(automation?.id, newName, automation?.enabled ?: true, iconId, current)
         }
     }
 
@@ -154,13 +160,17 @@ fun AutomationEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, automa
                 Text("This automation is no longer on the hub.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 return@Column
             }
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Name") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconChooser(iconId, R.drawable.ic_automation, enabled = loaded && !unreadable) { iconId = it }
+                Spacer(Modifier.width(12.dp))
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
             if (automation != null) {
                 Section {
                     SwitchRow("Enabled", if (automation.enabled) "Runs when its conditions are met" else "Paused", automation.enabled) { on ->

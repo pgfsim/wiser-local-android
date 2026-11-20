@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+  <title>Wall light</title>
+  <path d="M4,3v18M4,8h3"/>
+  <path d="M7,6.5l5.5,2.5-1.8,3.8-5.2,-2.7"/>
+  <path d="M13.63,13.46L15.98,14.31M12.4,14.92L13.65,17.09M10.51,15.26L10.08,17.72"/>
+</svg>

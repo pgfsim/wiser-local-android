@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+  <title>Garage</title>
+  <path d="M3,21V9l9,-6 9,6v12"/>
+  <path d="M6,19v-3l1.5,-3.38h7.5l2.25,3.38h0.38a0.38,0.38 0 0,1 0.38,0.38V19M6,19h1.35M10.65,19h2.7M16.65,19h1.35"/>
+  <path d="M7.35,19a1.65,1.65 0 1,0 3.3,0a1.65,1.65 0 1,0 -3.3,0"/>
+  <path d="M13.35,19a1.65,1.65 0 1,0 3.3,0a1.65,1.65 0 1,0 -3.3,0"/>
+</svg>

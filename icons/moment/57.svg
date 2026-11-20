@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+  <title>Level down</title>
+  <path d="M4,4h16v16h-16z"/>
+  <path d="M4,9q2,-1.6 4,0q2,-1.6 4,0q2,-1.6 4,0q2,-1.6 4,0"/>
+  <path d="M9.5,13.5l2.5,2.5 2.5,-2.5"/>
+</svg>

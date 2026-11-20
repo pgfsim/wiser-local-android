@@ -14,6 +14,7 @@ The app has four tabs, plus a settings page behind the gear icon:
   copy and delete heating schedules), and automations (create and edit them:
   away mode or hot water conditions, times including sunrise and sunset, and
   notifications, waits, Moments, room and hot water actions; on/off, delete).
+  Moments and automations show their icon, and you can choose it when editing.
 - **Control:** every room and the hot water with full controls: target
   temperature, boost, hold a temperature for a set time, mode (schedule,
   manual, off), advance to the next scheduled setting, the next scheduled
@@ -96,7 +97,8 @@ in tenths of a degree.
 | Run a Moment | `PATCH System` `{"TriggerMoment":1}` |
 | Create Moment | `POST Moment?Name=Bedtime&IconId=0` `{"Domain":"HotWater","Id":2,"Action":"RequestOverride","Value":"{\"type\":\"Manual\",\"setPoint\":-200}"}` |
 | Read / change a Moment's action | `GET Moment/{id}` / `PATCH Moment/{id}?Name=Bedtime&IconId=51` with the same body as Create |
-| Rename / delete Moment | `PATCH Moment/{id}` `{"Name":"Bedtime"}` / `DELETE Moment/{id}` |
+| Rename / change the icon of a Moment this app can't edit | `GET Moment/{id}`, then `PATCH Moment/{id}?Name=Bedtime&IconId=51` with the body exactly as read |
+| Delete Moment | `DELETE Moment/{id}` |
 | Add a device | `PATCH System/RequestPermitJoin` `120` |
 | Lock / identify device | `PATCH Device/{id}` `{"DeviceLockEnabled":true}` / `{"Identify":true}` (`false` to stop) |
 | Hub Wi-Fi details | `GET /data/v2/network/` |
@@ -158,7 +160,10 @@ script in the returned page. A change to that page could break it.
 - A Moment made or changed here can have up to 60 actions, each setting a room
   or turning the hot water on, off or on for a set time. Room boosts, waits and
   other device types are left to the official app; a Moment using them can be
-  run, renamed or deleted here but not edited.
+  run, renamed, given another icon or deleted here but not edited.
+- Icons: the hub stores a number (IconId 0 to 75) for each Moment and automation.
+  This app draws its own icon for each one; the SVGs are in `icons/moment`, and
+  `python tools/icons_to_drawables.py` turns them into the app's drawables.
 - The time zone offset is assumed to be in minutes from UTC.
 - Whether a firmware update is pending is not shown, because the hub's data
   does not say so clearly.

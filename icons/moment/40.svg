@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+  <title>Electric car</title>
+  <path d="M3,17v-4.5l2.25,-5.06h11.25l3.38,5.06h0.56a0.56,0.56 0 0,1 0.56,0.56V17M3,17h2.02M9.98,17h4.05M18.98,17h2.02"/>
+  <path d="M5.03,17a2.48,2.48 0 1,0 4.95,0a2.48,2.48 0 1,0 -4.95,0"/>
+  <path d="M14.03,17a2.48,2.48 0 1,0 4.95,0a2.48,2.48 0 1,0 -4.95,0"/>
+  <path d="M13,2l-2.2,3h3.2L11.8,8"/>
+</svg>

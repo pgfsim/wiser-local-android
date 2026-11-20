@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ceiling light. Generated from icons/moment by tools/icons_to_drawables.py -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M8,3h8M12,3v5"/>
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M8,8h8l3.5,7h-15z"/>
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M10,15a2,2 0 0,0 4,0"/>
+</vector>

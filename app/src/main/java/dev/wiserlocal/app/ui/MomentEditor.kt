@@ -39,6 +39,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -66,6 +67,7 @@ fun MomentEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, momentId: 
     }
 
     var name by remember { mutableStateOf(moment?.name ?: "") }
+    var iconId by remember { mutableIntStateOf(moment?.iconId ?: 0) }
     val actions = remember { mutableStateListOf<MomentAction>() }
     var loaded by remember { mutableStateOf(momentId == null) }
     var unknown by remember { mutableStateOf(false) }
@@ -74,7 +76,10 @@ fun MomentEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, momentId: 
     // Fill in the Moment's actions once the hub has told us what they are.
     LaunchedEffect(vm.momentActions, moment) {
         if (loaded || moment == null || moment.id !in vm.momentActions) return@LaunchedEffect
-        if (name.isEmpty()) name = moment.name
+        if (name.isEmpty()) {
+            name = moment.name
+            iconId = moment.iconId
+        }
         val loadedActions = vm.momentActions[moment.id]
         if (loadedActions == null) unknown = true else {
             original = loadedActions
@@ -83,7 +88,7 @@ fun MomentEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, momentId: 
         loaded = true
     }
 
-    val nameChanged = moment != null && name.trim() != moment.name
+    val nameChanged = moment != null && (name.trim() != moment.name || iconId != moment.iconId)
     val actionChanged = actions.toList() != original
     val dirty = if (moment == null) name.isNotBlank() || actions.isNotEmpty() else nameChanged || actionChanged
     val canSave = loaded && name.isNotBlank() && when {
@@ -101,11 +106,11 @@ fun MomentEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, momentId: 
         val newName = name.trim()
         when {
             moment == null -> vm.run("Moment “$newName” added", onSuccess = { nav.pop() }) {
-                it.createMoment(newName, actions.toList())
+                it.createMoment(newName, iconId, actions.toList())
             }
-            unknown -> vm.run("Moment renamed", onSuccess = { nav.pop() }) { it.renameMoment(moment.id, newName) }
+            unknown -> vm.run("Moment saved", onSuccess = { nav.pop() }) { it.rewriteMoment(moment.id, newName, iconId) }
             else -> vm.run("Moment saved", onSuccess = { nav.pop() }) {
-                it.updateMoment(moment.copy(name = newName), actions.toList())
+                it.updateMoment(moment.copy(name = newName, iconId = iconId), actions.toList())
             }
         }
     }
@@ -158,18 +163,7 @@ fun MomentEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, momentId: 
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .size(56.dp)
-                        .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(16.dp)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        painterResource(R.drawable.ic_moment),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                }
+                IconChooser(iconId, R.drawable.ic_moment, enabled = loaded) { iconId = it }
                 Spacer(Modifier.width(12.dp))
                 OutlinedTextField(
                     value = name,
@@ -193,7 +187,7 @@ fun MomentEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, momentId: 
                 !loaded -> Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 unknown -> NoteCard(
                     "This Moment was set up in the official app and does something this app can't show " +
-                        "or change yet, such as a room boost. You can still rename, run or delete it here.",
+                        "or change yet, such as a room boost. You can still rename it, change its icon, run it or delete it here.",
                 )
                 actions.isEmpty() -> Text(
                     "No actions yet. Tap Add action to choose what this Moment does.",

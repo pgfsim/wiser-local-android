@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+  <title>Printer</title>
+  <path d="M7,9V3h7l3,3v3"/>
+  <path d="M5,9h14a2,2 0 0,1 2,2v4a2,2 0 0,1 -2,2h-14a2,2 0 0,1 -2,-2v-4a2,2 0 0,1 2,-2z"/>
+  <path d="M7,14h10v7H7z"/>
+  <path d="M17.15,11.5a0.35,0.35 0 1,0 0.7,0a0.35,0.35 0 1,0 -0.7,0"/>
+</svg>

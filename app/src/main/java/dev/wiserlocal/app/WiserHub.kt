@@ -433,17 +433,23 @@ class WiserHub(host: String, private val secret: String) {
     /** Runs a Moment (scene) that was set up in the official app. */
     fun triggerMoment(momentId: Int) = patch("System", """{"TriggerMoment":$momentId}""")
 
-    // Rename and delete are not in the reference library. They follow the same
-    // pattern the hub uses for rooms, and are untested on a real hub.
-    fun renameMoment(momentId: Int, name: String) =
-        patch("Moment/$momentId", JSONObject().put("Name", name).toString())
+    /**
+     * Renames a Moment or changes its icon without touching what it does, for Moments
+     * this app can't describe: their actions are read back from the hub exactly as
+     * stored and sent again, the way the official app saves an edit.
+     */
+    fun rewriteMoment(momentId: Int, name: String, iconId: Int) {
+        // The hub answers with LF between actions; the official app sends CRLF.
+        val body = rootRequest("GET", "Moment/$momentId", null).trim().lines().joinToString("\r\n")
+        rootRequest("PATCH", "Moment/$momentId?" + momentQuery(name, iconId), body)
+    }
 
     /**
      * Creates a Moment, in the format the official app uses: name and icon in the
      * query string, one action per line in the body, each override as a JSON string.
      */
-    fun createMoment(name: String, actions: List<MomentAction>) {
-        rootRequest("POST", "Moment?" + momentQuery(name, 0), momentBody(actions))
+    fun createMoment(name: String, iconId: Int, actions: List<MomentAction>) {
+        rootRequest("POST", "Moment?" + momentQuery(name, iconId), momentBody(actions))
     }
 
     /**

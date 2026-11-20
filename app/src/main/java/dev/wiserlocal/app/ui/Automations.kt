@@ -92,7 +92,7 @@ fun AutomationsTab(vm: HubViewModel, modifier: Modifier) {
                             describeAction(action, state).let { (target, value) -> "$target: $value" }
                         }
                         ListCard(
-                            icon = painterResource(R.drawable.ic_moment),
+                            icon = painterResource(momentIcon(moment.iconId, R.drawable.ic_moment)),
                             title = moment.name,
                             detail = when {
                                 described != null -> described
@@ -116,7 +116,7 @@ fun AutomationsTab(vm: HubViewModel, modifier: Modifier) {
                     item(key = "a${automation.id}") {
                         val detail = vm.automationDetails[automation.id]
                         ListCard(
-                            icon = painterResource(R.drawable.ic_automation),
+                            icon = painterResource(momentIcon(automation.iconId, R.drawable.ic_automation)),
                             title = automation.name,
                             detail = when {
                                 detail != null -> automationSummary(detail, state)

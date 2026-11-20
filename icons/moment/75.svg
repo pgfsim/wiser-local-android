@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+  <title>Leak</title>
+  <path d="M9,9.9C7.5,12.3 6,14.7 6,16.5A3,3 0 0,0 12,16.5C12,14.7 10.5,12.3 9,9.9z"/>
+  <path d="M3,21h18"/>
+  <path d="M14.5,7a4,4 0 0,1 4,4M14.5,3a8,8 0 0,1 8,8"/>
+</svg>

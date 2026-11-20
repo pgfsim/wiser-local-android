@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Outdoor light. Generated from icons/moment by tools/icons_to_drawables.py -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M5,21V5a2,2 0 0,1 2,-2h2.5v3"/>
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M8,6h3l.7,2.2H7.3z"/>
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M14.2,8.2a1.8,1.8 0 1,0 3.6,0a1.8,1.8 0 1,0 -3.6,0"/>
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M13,21v-5.5a3,3 0 0,1 6,0V21"/>
+</vector>

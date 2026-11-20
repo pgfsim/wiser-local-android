@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Light on (solid). Generated from icons/moment by tools/icons_to_drawables.py -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FF000000" android:pathData="M10,17V14.46A4,4 0 1,1 14,14.46V17z"/>
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M10.2,18.8h3.6M10.88,20.4h2.24"/>
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M12,5.4L12,3.2M15.96,7.04L17.52,5.48M8.04,7.04L6.48,5.48M17.6,11L19.8,11M6.4,11L4.2,11"/>
+</vector>

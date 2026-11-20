@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Celebration. Generated from icons/moment by tools/icons_to_drawables.py -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M4,3h5.5l-.5,5.5a2.25,2.25 0 0,1 -4.5,0z"/>
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M6.75,10.75V19M4.5,19.5h4.5"/>
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M14.5,3H20l-.5,5.5a2.25,2.25 0 0,1 -4.5,0z"/>
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M17.25,10.75V19M15,19.5h4.5"/>
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M11.65,4a0.35,0.35 0 1,0 0.7,0a0.35,0.35 0 1,0 -0.7,0"/>
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M11.65,7.5a0.35,0.35 0 1,0 0.7,0a0.35,0.35 0 1,0 -0.7,0"/>
+</vector>
