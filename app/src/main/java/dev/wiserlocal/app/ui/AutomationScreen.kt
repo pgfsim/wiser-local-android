@@ -101,7 +101,8 @@ fun AutomationEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, automa
     val partsChanged = automation == null && (triggers.isNotEmpty() || times.isNotEmpty() || actions.isNotEmpty()) ||
         original != null && current != original
     val dirty = if (automation == null) name.isNotBlank() || partsChanged else nameChanged || partsChanged
-    val complete = actions.isNotEmpty() && (triggers.isNotEmpty() || times.isNotEmpty())
+    // The official app treats an automation with no condition as broken, even with a time set.
+    val complete = actions.isNotEmpty() && triggers.isNotEmpty()
     val canSave = loaded && !unreadable && name.isNotBlank() && complete && (automation == null || dirty)
 
     fun leave() {
@@ -210,7 +211,7 @@ fun AutomationEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, automa
             AddButton("Add action", actions.size < MAX_AUTOMATION_PARTS) { pickAutomationAction(dialogs, state) { actions.add(it) } }
             if (!complete) {
                 Text(
-                    "An automation needs at least one condition or time, and at least one action.",
+                    "An automation needs at least one condition and at least one action. Times are optional.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -281,7 +282,11 @@ private fun pickTime(dialogs: DialogHost, onPicked: (AutomationTime) -> Unit) {
             3 -> withDays { AutomationTime.between(WiserHub.SUNRISE, WiserHub.SUNSET, it) }
             4 -> withDays { AutomationTime.between(WiserHub.SUNSET, WiserHub.SUNRISE, it) }
             else -> dialogs.time("From", 7 * 60) { from ->
-                dialogs.time("Until", 9 * 60) { until -> withDays { AutomationTime.between(hhmm(from), hhmm(until), it) } }
+                dialogs.time("Until", (from + 120) % (24 * 60)) { until ->
+                    // A period that starts and ends at the same moment can't be opened in the official app.
+                    if (until == from) dialogs.message("Same start and end", "The period needs to end at a different time from when it starts.")
+                    else withDays { AutomationTime.between(hhmm(from), hhmm(until), it) }
+                }
             }
         }
     }

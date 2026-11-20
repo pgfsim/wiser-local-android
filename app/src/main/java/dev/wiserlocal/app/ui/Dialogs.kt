@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,8 +49,14 @@ class DialogHost {
     var content by mutableStateOf<(@Composable () -> Unit)?>(null)
         private set
 
+    private var shown = 0
+
     fun show(dialog: @Composable () -> Unit) {
-        content = dialog
+        // A fresh key per dialog, so one opened straight after another of the same kind
+        // (the "Until" time after the "From" time) starts from its own values rather than
+        // keeping the previous dialog's remembered state.
+        val id = ++shown
+        content = { key(id) { dialog() } }
     }
 
     fun close() {
