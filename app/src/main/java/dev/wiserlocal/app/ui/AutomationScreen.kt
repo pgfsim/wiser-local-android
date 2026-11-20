@@ -303,7 +303,7 @@ private fun pickAutomationAction(dialogs: DialogHost, state: HubState, onPicked:
             }
             index - fixed.size in rooms.indices -> {
                 val room = state.rooms[index - fixed.size]
-                val options = listOf("Set a temperature", "Turn off") + DURATIONS.map { "Boost for ${durationText(it)}" }
+                val options = listOf("Set a temperature", "Frost protection (off)") + DURATIONS.map { "Boost for ${durationText(it)}" }
                 dialogs.choice(room.name, options) { pick ->
                     when (pick) {
                         0 -> dialogs.temperature(room.name, 200) { onPicked(AutomationAction.manual("Room", room.id, it)) }
@@ -385,7 +385,8 @@ fun describeAutomationAction(a: AutomationAction, state: HubState): Pair<String,
     val text = when {
         type.equals("Boost", ignoreCase = true) -> "Boost" + (minutes?.let { " for ${durationText(it)}" } ?: "")
         type.equals("Manual", ignoreCase = true) && setPoint != null -> when {
-            setPoint == WiserHub.SCHEDULE_OFF -> "Off"
+            // Wiser calls a room set to off "frost protection"; the hot water is just off.
+            setPoint == WiserHub.SCHEDULE_OFF -> if (a.domain == "Room") "Frost protection" else "Off"
             a.domain == "HotWater" -> "On" + (minutes?.let { " for ${durationText(it)}" } ?: "")
             else -> WiserHub.formatSetPoint(setPoint / 10.0)
         }
