@@ -177,12 +177,12 @@ fun HomeTab(vm: HubViewModel, modifier: Modifier) {
             }
         }
 
-        item {
+        if (state.features.moments) item {
             SectionTitle("Moments") {
                 TextButton(onClick = { nav.automationsTab = 0; nav.tab = Tab.AUTOMATIONS }) { Text("Edit") }
             }
         }
-        item {
+        if (state.features.moments) item {
             if (state.moments.isEmpty()) {
                 Text(
                     "No Moments yet. Add one in Automations.",
@@ -240,7 +240,7 @@ private fun StatusCard(state: HubState, vm: HubViewModel) {
                     Text(detail, style = MaterialTheme.typography.bodyMedium)
                 }
             }
-            Row(
+            if (state.features.awayMode) Row(
                 Modifier
                     .fillMaxWidth()
                     .padding(top = 12.dp)
@@ -256,8 +256,10 @@ private fun StatusCard(state: HubState, vm: HubViewModel) {
                 Switch(checked = system.away, onCheckedChange = { on -> vm.run { it.setAway(on) } })
             }
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = { vm.run("All rooms boosted for an hour") { it.boostAllRooms() } }) {
-                    Text("Boost all rooms")
+                if (state.features.boostAll) {
+                    FilledTonalButton(onClick = { vm.run("All rooms boosted for an hour") { it.boostAllRooms() } }) {
+                        Text("Boost all rooms")
+                    }
                 }
                 OutlinedButton(onClick = { vm.run("Overrides cancelled") { it.cancelAllOverrides() } }) {
                     Text("Cancel overrides")

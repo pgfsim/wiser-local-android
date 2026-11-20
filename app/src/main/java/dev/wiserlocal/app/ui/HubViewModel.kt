@@ -134,10 +134,10 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                 val state = hub.fetch()
                 // Schedules only add "next change" lines, so a failure here is not fatal.
                 val schedules = try { hub.fetchSchedules() } catch (e: Exception) { emptyList() }
-                val actions = if (moments) {
+                val actions = if (moments && state.features.moments) {
                     state.moments.associate { m -> m.id to try { hub.fetchMomentActions(m.id) } catch (e: Exception) { null } }
                 } else null
-                val automations = if (moments) {
+                val automations = if (moments && state.features.automations) {
                     state.automations.associate { a -> a.id to try { hub.fetchAutomation(a.id) } catch (e: Exception) { null } }
                 } else null
                 val net = if (system) try { hub.fetchNetwork() } catch (e: Exception) { emptyList() } else null

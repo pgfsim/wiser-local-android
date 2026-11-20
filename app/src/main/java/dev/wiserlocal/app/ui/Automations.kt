@@ -60,11 +60,12 @@ fun AutomationsTab(vm: HubViewModel, modifier: Modifier) {
         vm,
         modifier,
         actions = {
+            val features = vm.state?.features
             when (selected) {
-                0 -> IconButton(onClick = { nav.push(Screen.MomentEditor(null)) }) {
+                0 -> if (features?.moments != false) IconButton(onClick = { nav.push(Screen.MomentEditor(null)) }) {
                     Icon(Icons.Default.Add, contentDescription = "Add a Moment")
                 }
-                1 -> IconButton(onClick = { nav.push(Screen.AutomationEditor(null)) }) {
+                1 -> if (features?.automations != false) IconButton(onClick = { nav.push(Screen.AutomationEditor(null)) }) {
                     Icon(Icons.Default.Add, contentDescription = "Add an automation")
                 }
                 2 -> IconButton(onClick = {
@@ -84,7 +85,9 @@ fun AutomationsTab(vm: HubViewModel, modifier: Modifier) {
     ) {
         val state = vm.state ?: return@TabScaffold
         when (selected) {
-            0 -> {
+            0 -> if (!state.features.moments) {
+                item { EmptyNote(needsFirmware("Moments", "3.7.14", state)) }
+            } else {
                 if (state.moments.isEmpty()) item { EmptyNote("No Moments yet. Tap + to add one.") }
                 state.moments.forEach { moment ->
                     item(key = "m${moment.id}") {
@@ -108,7 +111,9 @@ fun AutomationsTab(vm: HubViewModel, modifier: Modifier) {
                     }
                 }
             }
-            1 -> {
+            1 -> if (!state.features.automations) {
+                item { EmptyNote(needsFirmware("Automations", "4.6.0", state)) }
+            } else {
                 if (state.automations.isEmpty()) {
                     item { EmptyNote("No automations yet. Tap + to add one.") }
                 }
@@ -241,4 +246,10 @@ fun describeAction(action: MomentAction, state: HubState): Pair<String, String> 
     val target = if (action.domain == "HotWater") "Hot water"
     else state.rooms.firstOrNull { it.id == action.id }?.name ?: "Room ${action.id}"
     return target to value
+}
+
+/** Says a feature needs newer hub firmware, naming the firmware the hub has. */
+fun needsFirmware(feature: String, minimum: String, state: dev.wiserlocal.app.HubState): String {
+    val have = state.features.firmwareText?.let { " This hub has $it." } ?: ""
+    return "$feature need hub firmware $minimum or newer.$have"
 }

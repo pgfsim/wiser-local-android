@@ -155,6 +155,8 @@ data class HubState(
     val devices: List<Device>,
     val moments: List<Moment>,
     val automations: List<Automation> = emptyList(),
+    /** What this hub's firmware supports. */
+    val features: HubFeatures = HubFeatures(),
 )
 
 /**
@@ -322,7 +324,7 @@ class WiserHub(host: String, private val secret: String) {
             automations += Automation(id, name, o.optInt("IconId", 0), o.optBoolean("Enabled", true), o.optBoolean("EnableNotification", false))
         }
 
-        return HubState(rooms, hotWater, system, devices, moments, automations)
+        return HubState(rooms, hotWater, system, devices, moments, automations, HubFeatures.parse(json))
     }
 
     fun setRoomTemp(roomId: Int, tempC: Double) {

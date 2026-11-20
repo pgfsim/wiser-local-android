@@ -67,7 +67,9 @@ fun SettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                 InfoRow("Devices", "Thermostats and valves: battery, signal, lock, identify", showChevron = true) { nav.push(Screen.Devices) }
             }
             Section {
-                InfoRow("Away mode", "Away temperature and hot water", showChevron = true) { nav.push(Screen.Away) }
+                if (vm.state?.features?.awayMode != false) {
+                    InfoRow("Away mode", "Away temperature and hot water", showChevron = true) { nav.push(Screen.Away) }
+                }
                 RowDivider()
                 InfoRow("Smart modes", "Eco, comfort and open window detection", showChevron = true) { nav.push(Screen.SmartModes) }
                 RowDivider()
@@ -290,7 +292,7 @@ fun RoomsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                             add("Rename" to {
                                 dialogs.prompt("Rename ${room.name}", room.name) { name -> vm.run { it.renameRoom(room.id, name) } }
                             })
-                            if (heating.isNotEmpty()) add("Change schedule" to {
+                            if (heating.isNotEmpty() && state.features.assignableSchedules) add("Change schedule" to {
                                 dialogs.choice(
                                     "Schedule for ${room.name}",
                                     heating.map { it.name.ifEmpty { "Schedule" } },
@@ -368,7 +370,7 @@ fun DevicesScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
             state.devices.forEach { device ->
                 Section {
                     InfoRow(deviceName(device), deviceDetails(device).joinToString("\n"))
-                    device.locked?.let { locked ->
+                    device.locked?.takeIf { state.features.deviceLock }?.let { locked ->
                         RowDivider()
                         SwitchRow("Device lock", "Locks the buttons on the device.", locked) { on ->
                             vm.run { it.setDeviceLock(device.id, on) }
@@ -444,7 +446,7 @@ fun SmartModesScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                     }
                 }
             }
-            val windowRooms = state.rooms.filter { it.windowDetection != null }
+            val windowRooms = if (state.features.openWindowDetection) state.rooms.filter { it.windowDetection != null } else emptyList()
             if (windowRooms.isNotEmpty()) {
                 Section("Open window detection") {
                     windowRooms.forEachIndexed { index, room ->
@@ -469,7 +471,8 @@ fun SystemSettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
     }
     DetailScaffold("System settings", snackbar, onBack = { nav.pop() }, loading = vm.loading) { padding ->
         SettingsColumn(padding) {
-            val system = vm.state?.system ?: return@SettingsColumn
+            val state = vm.state ?: return@SettingsColumn
+            val system = state.system
             Section("Hub") {
                 val rows = buildList<HubRow> {
                     add(HubRow("Firmware", system.firmware))
@@ -480,18 +483,22 @@ fun SystemSettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                         val onClick: (() -> Unit)? = when (key) {
                             "FuelType" -> {
                                 {
-                                    dialogs.choice("Heat source type", HEAT_SOURCES.map { it.second }, HEAT_SOURCES.indexOfFirst { it.first == value }.takeIf { it >= 0 }) { i ->
-                                        val picked = HEAT_SOURCES[i].first
+                                    // Heat pumps need firmware 3.3.3; keep the option if the hub already uses it.
+                                    val sources = HEAT_SOURCES.filter { it.first != "HeatPump" || state.features.heatPump || it.first == value }
+                                    dialogs.choice("Heat source type", sources.map { it.second }, sources.indexOfFirst { it.first == value }.takeIf { it >= 0 }) { i ->
+                                        val picked = sources[i].first
                                         if (picked != value) vm.run { it.setFuelType(picked) }
                                     }
                                 }
                             }
                             "ControlType" -> {
                                 {
-                                    dialogs.choice("Boiler type", BOILER_TYPES.map { it.second }, BOILER_TYPES.indexOfFirst { it.first == value }.takeIf { it >= 0 }) { i ->
-                                        val picked = BOILER_TYPES[i].first
+                                    // OpenTherm needs firmware 2.29.0; keep the option if the hub already uses it.
+                                    val types = BOILER_TYPES.filter { !it.first.contains("OpenTherm") || state.features.openTherm || it.first == value }
+                                    dialogs.choice("Boiler type", types.map { it.second }, types.indexOfFirst { it.first == value }.takeIf { it >= 0 }) { i ->
+                                        val picked = types[i].first
                                         if (picked != value) dialogs.confirm(
-                                            "Change the boiler type to ${BOILER_TYPES[i].second}? Pick OpenTherm only if the boiler is wired to the hub's " +
+                                            "Change the boiler type to ${types[i].second}? Pick OpenTherm only if the boiler is wired to the hub's " +
                                                 "OpenTherm terminals, and Standard only if it is wired to the relay; the wrong one can stop the heating.",
                                             "Change",
                                         ) { vm.run { it.setBoilerControlType(picked) } }
@@ -526,7 +533,8 @@ fun SystemSettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                     }
                 }
             }
-            if (system.hotWaterChannel != null || system.legacyPowerTagMode != null) {
+            val legacyPowerTag = system.legacyPowerTagMode?.takeIf { state.features.legacyPowerTagMode }
+            if (system.hotWaterChannel != null || legacyPowerTag != null) {
                 Section("Channels") {
                     system.hotWaterChannel?.let { enabled ->
                         // The official app greys this out when an Aidoo Pro heat pump is paired.
@@ -546,7 +554,7 @@ fun SystemSettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                             ) { vm.run { it.setHotWaterChannel(false) } }
                         }
                     }
-                    system.legacyPowerTagMode?.let { enabled ->
+                    legacyPowerTag?.let { enabled ->
                         if (system.hotWaterChannel != null) RowDivider()
                         SwitchRow(
                             "Legacy PowerTag energy mode",

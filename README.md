@@ -126,6 +126,24 @@ the library behind the Home Assistant integration.
 The UI is Jetpack Compose with Material 3 (in `app/src/main/java/dev/wiserlocal/app/ui/`).
 Talking to the hub uses only `HttpURLConnection` and `org.json`.
 
+## Hub firmware support
+
+The app only offers what the hub's firmware supports. It reads the firmware version from the hub's controller device, plus the hub's own lists of the device types it can pair (`DeviceCapabilityMatrix`) and its automation limits (`FeatureCapability`). If the hub doesn't report one of these, the app doesn't hide anything because of it.
+
+| Feature | Needs firmware |
+|---|---|
+| Away mode | 2.12.2 |
+| Open window detection | 2.18.100 |
+| Device lock | 2.19.78 |
+| Boost all rooms, OpenTherm boiler type | 2.29.0 |
+| Changing a room's schedule | 2.55.0 |
+| Heat pump heat source | 3.3.3 |
+| Moments | 3.7.14 |
+| Automations | 4.6.0 |
+| Legacy PowerTag energy mode | 4.34.11 |
+
+The automation editor uses the hub's limits for conditions, times and actions (`FeatureCapability.Automation`), and offers Wait steps only when the hub allows them.
+
 ## Wiser account (Insights)
 
 Only Insights uses the internet. It signs in to Wiser's cloud the same way the

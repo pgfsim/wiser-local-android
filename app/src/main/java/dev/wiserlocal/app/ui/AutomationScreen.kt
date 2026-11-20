@@ -54,7 +54,6 @@ import dev.wiserlocal.app.WiserHub
 import org.json.JSONObject
 
 /** The official app allows ten of each: conditions, times and actions. */
-const val MAX_AUTOMATION_PARTS = 10
 
 private val WAITS = listOf(1, 5, 10, 15, 30, 45, 60, 90, 120, 180, 240, 360)
 
@@ -189,7 +188,11 @@ fun AutomationEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, automa
                 }
             }
 
-            PartsHeader("If", "${triggers.size} of $MAX_AUTOMATION_PARTS")
+            val features = state.features
+            val maxTriggers = features.automationMaxTriggers
+            val maxTimes = features.automationMaxTimes
+            val maxActions = features.automationMaxActions
+            PartsHeader("If", "${triggers.size} of $maxTriggers")
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 listOf("All" to "All conditions", "Any" to "Any condition").forEachIndexed { index, (mode, label) ->
                     SegmentedButton(
@@ -203,22 +206,25 @@ fun AutomationEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, automa
                 val (target, text) = describeTrigger(trigger, state)
                 PartCard(target, text) { triggers.removeAt(index) }
             }
-            AddButton("Add condition", triggers.size < MAX_AUTOMATION_PARTS) { pickTrigger(dialogs, state) { triggers.add(it) } }
+            AddButton("Add condition", triggers.size < maxTriggers) { pickTrigger(dialogs, state) { triggers.add(it) } }
 
-            PartsHeader("When", "${times.size} of $MAX_AUTOMATION_PARTS")
-            if (times.isEmpty()) Text("At any time", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            times.forEachIndexed { index, time ->
-                PartCard(describeTime(time), daysText(time.days)) { times.removeAt(index) }
+            // Hubs that allow no time limits get no When part (unless an automation already has one).
+            if (maxTimes > 0 || times.isNotEmpty()) {
+                PartsHeader("When", "${times.size} of $maxTimes")
+                if (times.isEmpty()) Text("At any time", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                times.forEachIndexed { index, time ->
+                    PartCard(describeTime(time), daysText(time.days)) { times.removeAt(index) }
+                }
+                AddButton("Add time", times.size < maxTimes) { pickTime(dialogs) { times.add(it) } }
             }
-            AddButton("Add time", times.size < MAX_AUTOMATION_PARTS) { pickTime(dialogs) { times.add(it) } }
 
-            PartsHeader("Then", "${actions.size} of $MAX_AUTOMATION_PARTS")
+            PartsHeader("Then", "${actions.size} of $maxActions")
             Text("Actions run in this order.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             actions.forEachIndexed { index, action ->
                 val (target, text) = describeAutomationAction(action, state)
                 PartCard(target, text) { actions.removeAt(index) }
             }
-            AddButton("Add action", actions.size < MAX_AUTOMATION_PARTS) { pickAutomationAction(dialogs, state) { actions.add(it) } }
+            AddButton("Add action", actions.size < maxActions) { pickAutomationAction(dialogs, state) { actions.add(it) } }
             if (!complete) {
                 Text(
                     "An automation needs at least one condition and at least one action. Times are optional.",
@@ -304,13 +310,18 @@ private fun pickTime(dialogs: DialogHost, onPicked: (AutomationTime) -> Unit) {
 
 private fun pickAutomationAction(dialogs: DialogHost, state: HubState, onPicked: (AutomationAction) -> Unit) {
     val water = state.hotWater
-    val fixed = listOf("Send a notification", "Wait", "Run a Moment")
+    // Wait steps and Moments only where the hub supports them.
+    val fixed = listOfNotNull(
+        "Send a notification",
+        "Wait".takeIf { state.features.automationWait },
+        "Run a Moment".takeIf { state.features.moments },
+    )
     val rooms = state.rooms.map { "Heating · ${it.name}" }
     dialogs.choice("Add action", fixed + rooms + listOfNotNull(water?.let { "Hot water" })) { index ->
         when {
-            index == 0 -> onPicked(AutomationAction.notification())
-            index == 1 -> dialogs.choice("Wait for", WAITS.map(::durationText)) { onPicked(AutomationAction.wait(WAITS[it])) }
-            index == 2 -> {
+            index < fixed.size && fixed[index] == "Send a notification" -> onPicked(AutomationAction.notification())
+            index < fixed.size && fixed[index] == "Wait" -> dialogs.choice("Wait for", WAITS.map(::durationText)) { onPicked(AutomationAction.wait(WAITS[it])) }
+            index < fixed.size && fixed[index] == "Run a Moment" -> {
                 if (state.moments.isEmpty()) dialogs.message("No Moments", "Make a Moment first, then come back to run it from here.")
                 else dialogs.choice("Run which Moment?", state.moments.map { it.name.trim() }) {
                     onPicked(AutomationAction.runMoment(state.moments[it].id))
