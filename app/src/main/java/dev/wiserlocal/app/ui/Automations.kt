@@ -64,6 +64,9 @@ fun AutomationsTab(vm: HubViewModel, modifier: Modifier) {
                 0 -> IconButton(onClick = { nav.push(Screen.MomentEditor(null)) }) {
                     Icon(Icons.Default.Add, contentDescription = "Add a Moment")
                 }
+                1 -> IconButton(onClick = { nav.push(Screen.AutomationEditor(null)) }) {
+                    Icon(Icons.Default.Add, contentDescription = "Add an automation")
+                }
                 2 -> IconButton(onClick = {
                     dialogs.prompt("New heating schedule", "") { name ->
                         vm.run("Schedule “$name” added") { it.createHeatingSchedule(name) }
@@ -107,7 +110,7 @@ fun AutomationsTab(vm: HubViewModel, modifier: Modifier) {
             }
             1 -> {
                 if (state.automations.isEmpty()) {
-                    item { EmptyNote("No automations on the hub. For now, make them in the official app; they will show here.") }
+                    item { EmptyNote("No automations yet. Tap + to add one.") }
                 }
                 state.automations.forEach { automation ->
                     item(key = "a${automation.id}") {
@@ -120,7 +123,7 @@ fun AutomationsTab(vm: HubViewModel, modifier: Modifier) {
                                 automation.id in vm.automationDetails -> "Set up in the official app"
                                 else -> null
                             },
-                            onClick = { nav.push(Screen.AutomationDetail(automation.id)) },
+                            onClick = { nav.push(Screen.AutomationEditor(automation.id)) },
                         ) {
                             Switch(
                                 checked = automation.enabled,

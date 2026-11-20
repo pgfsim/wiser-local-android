@@ -117,38 +117,6 @@ data class MomentAction(val domain: String, val id: Int, val setPoint: Int, val 
 /** An automation as listed in the hub's domain data: name, icon and whether it is on. */
 data class Automation(val id: Int, val name: String, val iconId: Int, val enabled: Boolean, val notify: Boolean)
 
-/** What an automation does, read with GET /Automation/{id}. */
-data class AutomationDetail(
-    /** "All" or "Any": how the triggers combine. */
-    val triggerMode: String,
-    val triggers: List<AutomationTrigger>,
-    val times: List<AutomationTime>,
-    val actions: List<AutomationAction>,
-)
-
-/** "If [domain] [id]'s [property] [comparator] [compareTo]", e.g. HotWater 2 WaterHeatingState Equals Off. */
-data class AutomationTrigger(val domain: String, val id: Int, val property: String, val comparator: String, val compareTo: String)
-
-/**
- * A time condition. A period has [start] and [end]; a single time has only [start].
- * Times are HHMM (705 = 07:05), or [WiserHub.SUNRISE] / [WiserHub.SUNSET].
- */
-data class AutomationTime(val start: Int?, val end: Int?, val days: List<String>)
-
-/**
- * One step. Usually [action] on [domain] [id] with [value] (often a JSON string such as
- * {"type":"Boost",...}); a push notification step has [notify] set, a pause has [waitHhmm]
- * (102 = 1 hour 2 minutes).
- */
-data class AutomationAction(
-    val domain: String,
-    val id: Int,
-    val action: String,
-    val value: String,
-    val notify: Boolean? = null,
-    val waitHhmm: Int? = null,
-)
-
 data class HubState(
     val rooms: List<Room>,
     val hotWater: HotWater?,
@@ -557,52 +525,21 @@ class WiserHub(host: String, private val secret: String) {
 
     /**
      * What an automation does. Like Moments, this lives at the hub's root
-     * (GET /Automation/{id}), and the keys come back capitalised.
+     * (GET /Automation/{id}). The hub answers with capitalised keys but the official
+     * app saves with lower-case first letters, so keys are converted on the way in.
      */
-    fun fetchAutomation(id: Int): AutomationDetail {
-        val json = JSONObject(rootRequest("GET", "Automation/$id", null))
-        fun JSONObject.str(key: String) = optStringOrNull(key) ?: optStringOrNull(key.replaceFirstChar { it.lowercase() })
-        fun JSONObject.arr(key: String) = optJSONArray(key) ?: optJSONArray(key.replaceFirstChar { it.lowercase() })
-        val triggers = mutableListOf<AutomationTrigger>()
-        json.arr("Triggers").forEachObject { t ->
-            val compare = t.optJSONObject("CompareTo") ?: t.optJSONObject("compareTo")
-            // CompareTo holds one typed value, e.g. {"StringValue":"Off"}.
-            val compareText = compare?.keys()?.asSequence()?.firstOrNull()?.let { compare.opt(it)?.toString() } ?: ""
-            triggers += AutomationTrigger(
-                domain = t.str("Domain") ?: "",
-                id = t.optInt("Id", t.optInt("id")),
-                property = t.str("Get") ?: "",
-                comparator = t.str("Comparator") ?: "",
-                compareTo = compareText,
-            )
-        }
-        val times = mutableListOf<AutomationTime>()
-        json.arr("TimeConstraints").forEachObject { c ->
-            fun int(key: String) = when {
-                c.has(key) -> c.optInt(key)
-                c.has(key.replaceFirstChar { it.lowercase() }) -> c.optInt(key.replaceFirstChar { it.lowercase() })
-                else -> null
-            }
-            val days = c.optJSONObject("ActiveDays") ?: c.optJSONObject("activeDays")
-            times += AutomationTime(
-                start = int("StartTime") ?: int("Time"),
-                end = int("EndTime"),
-                days = WiserHub.DAYS.filter { day -> days?.optBoolean(day) == true || days?.optBoolean(day.lowercase()) == true },
-            )
-        }
-        val actions = mutableListOf<AutomationAction>()
-        json.arr("Actions").forEachObject { a ->
-            fun key(name: String) = name.takeIf { a.has(it) } ?: name.replaceFirstChar { it.lowercase() }.takeIf { a.has(it) }
-            actions += AutomationAction(
-                domain = a.str("Domain") ?: "",
-                id = a.optInt("Id", a.optInt("id")),
-                action = a.str("Action") ?: "",
-                value = a.str("Value") ?: "",
-                notify = key("EnableNotification")?.let { a.optBoolean(it) },
-                waitHhmm = key("Wait")?.let { a.optInt(it) },
-            )
-        }
-        return AutomationDetail(json.str("TriggerMode") ?: "All", triggers, times, actions)
+    fun fetchAutomation(id: Int): AutomationDetail =
+        AutomationDetail.parse(camelKeys(JSONObject(rootRequest("GET", "Automation/$id", null))) as JSONObject)
+
+    /**
+     * Creates ([id] null) or replaces an automation, as the official app does: name,
+     * on/off and icon in the query string, the whole automation in the body.
+     */
+    fun saveAutomation(id: Int?, name: String, enabled: Boolean, iconId: Int, detail: AutomationDetail) {
+        val query = "Name=" + URLEncoder.encode(name, "UTF-8") + "&Enabled=$enabled&IconId=$iconId"
+        val body = detail.toJson().toString()
+        if (id == null) rootRequest("POST", "Automation?$query", body)
+        else rootRequest("PATCH", "Automation/$id?$query", body)
     }
 
     /** Turns an automation on or off, as the official app does: the bare true/false to its Enabled path. */
@@ -919,6 +856,15 @@ class WiserHub(host: String, private val secret: String) {
 
         private fun fromHhmm(hhmm: Int): Int = (hhmm / 100) * 60 + hhmm % 100
         private fun toHhmm(minutes: Int): Int = (minutes / 60) * 100 + minutes % 60
+
+        /** A copy of [value] with the first letter of every key in lower case. */
+        fun camelKeys(value: Any?): Any? = when (value) {
+            is JSONObject -> JSONObject().also { out ->
+                value.keys().forEach { key -> out.put(key.replaceFirstChar { it.lowercase() }, camelKeys(value.opt(key))) }
+            }
+            is JSONArray -> JSONArray().also { out -> for (i in 0 until value.length()) out.put(camelKeys(value.opt(i))) }
+            else -> value
+        }
 
         private inline fun JSONArray?.forEachObject(block: (JSONObject) -> Unit) {
             if (this == null) return

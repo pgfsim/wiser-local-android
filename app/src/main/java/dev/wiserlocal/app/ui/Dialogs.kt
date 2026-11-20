@@ -16,6 +16,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.MaterialTheme
@@ -210,4 +214,54 @@ fun TempStepper(value: Int, allowOff: Boolean, onChange: (Int) -> Unit) {
         )
         FilledTonalIconButton(onClick = { step(5) }) { Text("+", fontSize = 22.sp) }
     }
+}
+
+/** Picks a time of day; [initial] and the result are minutes past midnight. */
+@OptIn(ExperimentalMaterial3Api::class)
+fun DialogHost.time(title: String, initial: Int, onOk: (Int) -> Unit) = show {
+    val context = LocalContext.current
+    val state = rememberTimePickerState(
+        initialHour = initial / 60,
+        initialMinute = initial % 60,
+        is24Hour = android.text.format.DateFormat.is24HourFormat(context),
+    )
+    AlertDialog(
+        onDismissRequest = ::close,
+        title = { Text(title) },
+        text = { TimePicker(state = state) },
+        confirmButton = { TextButton(onClick = { close(); onOk(state.hour * 60 + state.minute) }) { Text("OK") } },
+        dismissButton = { TextButton(onClick = ::close) { Text("Cancel") } },
+    )
+}
+
+/** Picks days of the week, spelled as in [WiserHub.DAYS]; at least one must stay chosen. */
+@OptIn(ExperimentalLayoutApi::class)
+fun DialogHost.days(title: String, initial: List<String>, onOk: (List<String>) -> Unit) = show {
+    var chosen by remember { mutableStateOf(initial.toSet()) }
+    AlertDialog(
+        onDismissRequest = ::close,
+        title = { Text(title) },
+        text = {
+            Column {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    WiserHub.DAYS.forEach { day ->
+                        FilterChip(
+                            selected = day in chosen,
+                            onClick = { chosen = if (day in chosen) chosen - day else chosen + day },
+                            label = { Text(day.take(3)) },
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { chosen = WiserHub.DAYS.toSet() }) { Text("Every day") }
+                    TextButton(onClick = { chosen = WiserHub.DAYS.take(5).toSet() }) { Text("Weekdays") }
+                    TextButton(onClick = { chosen = WiserHub.DAYS.drop(5).toSet() }) { Text("Weekends") }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { close(); onOk(WiserHub.DAYS.filter { it in chosen }) }, enabled = chosen.isNotEmpty()) { Text("OK") }
+        },
+        dismissButton = { TextButton(onClick = ::close) { Text("Cancel") } },
+    )
 }

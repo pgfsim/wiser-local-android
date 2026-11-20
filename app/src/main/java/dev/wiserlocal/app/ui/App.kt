@@ -42,7 +42,7 @@ sealed interface Screen {
     data object HomeLayout : Screen
     data object Theme : Screen
     data class MomentEditor(val momentId: Int?) : Screen
-    data class AutomationDetail(val automationId: Int) : Screen
+    data class AutomationEditor(val automationId: Int?) : Screen
     data class ScheduleEditor(val id: Int, val heating: Boolean, val title: String) : Screen
 }
 
@@ -95,7 +95,7 @@ fun WiserApp(vm: HubViewModel) {
             Screen.HomeLayout -> HomeLayoutScreen(vm, snackbar)
             Screen.Theme -> ThemeScreen(vm, snackbar)
             is Screen.MomentEditor -> MomentEditorScreen(vm, snackbar, screen.momentId)
-            is Screen.AutomationDetail -> AutomationDetailScreen(vm, snackbar, screen.automationId)
+            is Screen.AutomationEditor -> AutomationEditorScreen(vm, snackbar, screen.automationId)
             is Screen.ScheduleEditor -> ScheduleEditorScreen(vm, snackbar, screen)
         }
 

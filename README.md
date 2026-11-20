@@ -11,9 +11,9 @@ The app has four tabs, plus a settings page behind the gear icon:
   controls (choose and order them with Edit); and your Moments, one tap to run.
 - **Automations:** Moments (create, edit, rename, delete and run), Schedules
   (a weekly editor for each heating schedule and for hot water; add, rename,
-  copy and delete heating schedules), and automations (see what each one does,
-  turn it on or off, delete it; making and changing them is still done in the
-  official app).
+  copy and delete heating schedules), and automations (create and edit them:
+  away mode or hot water conditions, times including sunrise and sunset, and
+  notifications, waits, Moments, room and hot water actions; on/off, delete).
 - **Control:** every room and the hot water with full controls: target
   temperature, boost, hold a temperature for a set time, mode (schedule,
   manual, off), advance to the next scheduled setting, the next scheduled
