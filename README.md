@@ -94,7 +94,8 @@ in tenths of a degree.
 | Rename / add / delete room | `PATCH Room/{id}` `{"Name":"Study"}` / `POST Room/` `{"Name":"Study"}` / `DELETE Room/{id}` |
 | Boost all / cancel all | `PATCH System/RequestOverride` `{"Type":"Boost","DurationMinutes":60}` / `PATCH System` `{"RequestOverride":{"Type":"CancelUserOverrides"}}` |
 | Away settings | `PATCH System` `{"AwayModeSetPointLimit":160}` / `PATCH System/AwayModeAffectsHotWater` `true` |
-| Valve protection / clock | `PATCH System` `{"ValveProtectionEnabled":true}` / `{"AutomaticDaylightSaving":"true"}` / `{"TimeZoneOffset":0}` |
+| Valve protection | `PATCH System` `{"ValveProtectionEnabled":true}` |
+| Hub clock | `PATCH System/` `{"TimeZoneIdentifier":"Europe/London"}` / `{"TimeZoneOffset":0}` (minutes) / `{"UpdateUnixTime":<seconds>}` |
 | Heat source / boiler type | `PATCH System/BoilerSettings/` `{"FuelType":"Oil"}` (Gas, Oil, Electric, HeatPump; the hub then sets the cycle rate) / `{"ControlType":"HeatSourceType_OpenTherm"}` (or `HeatSourceType_RelayControlled`, shown as Standard) |
 | OpenTherm hot water / max heating water temperature | `PATCH /data/v2/openTherm/preDefinedRemoteBoilerParameters/` `{"dhwSetpoint":600}` / `{"maxChSetpoint":650}` (tenths of a degree) |
 | Hot water channel on / off | `PATCH System/HotWaterEnabled` `true` / `false` (offered when `System.HotWaterChannelSupported`) |

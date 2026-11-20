@@ -79,9 +79,12 @@ data class SystemInfo(
     val awayAffectsHotWater: Boolean?,
     /** Periodic valve exercise that stops radiator valves seizing. */
     val valveProtection: Boolean?,
-    val autoDaylightSaving: Boolean?,
-    /** Hub clock offset from UTC, as the hub stores it (believed to be minutes). */
+    /** IANA time zone the hub follows, such as Europe/London, which sets its summer time. */
+    val timeZoneId: String?,
+    /** Hub clock offset from UTC in minutes. */
     val timeZoneOffset: Int?,
+    /** The hub's local time of day in minutes after midnight, as of the last refresh. */
+    val hubTime: Int? = null,
     /** Whether the hub's hot water channel is in use, or null if this hub can't switch it. */
     val hotWaterChannel: Boolean? = null,
     /**
@@ -269,8 +272,10 @@ class WiserHub(host: String, private val secret: String) {
             awayTempC = if (sys.has("AwayModeSetPointLimit")) fromHub(sys.optInt("AwayModeSetPointLimit")) else null,
             awayAffectsHotWater = sys.optBooleanOrNull("AwayModeAffectsHotWater"),
             valveProtection = sys.optBooleanOrNull("ValveProtectionEnabled"),
-            autoDaylightSaving = sys.optBooleanOrNull("AutomaticDaylightSaving"),
+            timeZoneId = sys.optStringOrNull("TimeZoneIdentifier"),
             timeZoneOffset = if (sys.has("TimeZoneOffset")) sys.optInt("TimeZoneOffset") else null,
+            hubTime = sys.optJSONObject("LocalDateAndTime")?.takeIf { it.has("Time") }
+                ?.optInt("Time")?.let { it / 100 * 60 + it % 100 },
             // The official app only offers the switch when the hub says the channel can be switched.
             hotWaterChannel = if (sys.optBoolean("HotWaterChannelSupported")) sys.optBoolean("HotWaterEnabled", true) else null,
             legacyPowerTagMode = json.optJSONObject("Zigbee")?.optStringOrNull("LegacyLongPacketSupport")
@@ -425,10 +430,14 @@ class WiserHub(host: String, private val secret: String) {
     fun setAwayAffectsHotWater(enabled: Boolean) =
         patch("System/AwayModeAffectsHotWater", enabled.toString())
 
-    fun setAutoDaylightSaving(enabled: Boolean) =
-        patch("System", """{"AutomaticDaylightSaving":"$enabled"}""")
+    /** Sets the IANA time zone (Europe/London); the hub works out summer time from it. */
+    fun setTimeZone(id: String) =
+        patch("System/", JSONObject().put("TimeZoneIdentifier", id).toString())
 
-    fun setTimeZoneOffset(offset: Int) = patch("System", """{"TimeZoneOffset":$offset}""")
+    /** Sets the hub clock to [unixSeconds] (UTC). */
+    fun setHubClock(unixSeconds: Long) = patch("System/", """{"UpdateUnixTime":$unixSeconds}""")
+
+    fun setTimeZoneOffset(offset: Int) = patch("System/", """{"TimeZoneOffset":$offset}""")
 
     fun setValveProtection(enabled: Boolean) = patch("System", """{"ValveProtectionEnabled":$enabled}""")
 

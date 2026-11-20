@@ -556,22 +556,36 @@ fun SystemSettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                     }
                 }
             }
-            if (system.autoDaylightSaving != null || system.timeZoneOffset != null) {
+            if (system.timeZoneId != null || system.timeZoneOffset != null || system.hubTime != null) {
                 Section("Hub clock") {
-                    system.autoDaylightSaving?.let { enabled ->
-                        SwitchRow("Automatic daylight saving", "The hub moves its clock for summer time by itself.", enabled) { on ->
-                            vm.run { it.setAutoDaylightSaving(on) }
-                        }
-                    }
-                    system.timeZoneOffset?.let { offset ->
-                        if (system.autoDaylightSaving != null) RowDivider()
-                        InfoRow("Time zone offset", "$offset minutes from UTC", showChevron = true) {
-                            dialogs.prompt("Offset from UTC in minutes (0 for the UK)", offset.toString(), numeric = true) { text ->
-                                val value = text.toIntOrNull()
-                                if (value != null && value in -720..840) vm.run { it.setTimeZoneOffset(value) }
+                    val rows = mutableListOf<@Composable () -> Unit>()
+                    system.timeZoneId?.let { zone ->
+                        rows += {
+                            InfoRow("Time zone", "$zone · sets when summer time starts and ends", showChevron = true) {
+                                pickTimeZone(dialogs, zone) { picked -> vm.run("Time zone set to $picked") { it.setTimeZone(picked) } }
                             }
                         }
                     }
+                    system.timeZoneOffset?.let { offset ->
+                        rows += {
+                            InfoRow("Time zone offset", "$offset minutes from UTC", showChevron = true) {
+                                dialogs.prompt("Offset from UTC in minutes (0 for the UK)", offset.toString(), numeric = true) { text ->
+                                    val value = text.toIntOrNull()
+                                    if (value != null && value in -720..840) vm.run { it.setTimeZoneOffset(value) }
+                                }
+                            }
+                        }
+                    }
+                    rows += {
+                        val context = LocalContext.current
+                        val shown = system.hubTime?.let { "The hub's clock said ${context.clockText(it)} at the last refresh. " } ?: ""
+                        InfoRow("Set the hub clock", "${shown}Sets it to this phone's time.", showChevron = true) {
+                            dialogs.confirm("Set the hub clock to this phone's time?", "Set clock") {
+                                vm.run("Hub clock set") { it.setHubClock(System.currentTimeMillis() / 1000) }
+                            }
+                        }
+                    }
+                    rows.forEachIndexed { i, row -> if (i > 0) RowDivider(); row() }
                 }
             }
             if (system.usesOpenTherm) {
@@ -731,3 +745,23 @@ fun ThemeScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
         }
     }
 }
+
+/** Picks an IANA time zone: this phone's zone first, then a region, then a zone in it. */
+private fun pickTimeZone(dialogs: DialogHost, current: String, onPick: (String) -> Unit) {
+    val zones = java.time.ZoneId.getAvailableZoneIds()
+        .filter { id -> id.substringBefore('/', "") in TZ_REGIONS }
+        .sorted()
+    val phone = java.time.ZoneId.systemDefault().id
+    val regions = TZ_REGIONS.filter { r -> zones.any { it.startsWith("$r/") } }
+    val options = listOf("This phone's time zone ($phone)") + regions
+    dialogs.choice("Time zone (now $current)", options) { index ->
+        if (index == 0) onPick(phone)
+        else {
+            val inRegion = zones.filter { it.startsWith("${regions[index - 1]}/") }
+            dialogs.choice(regions[index - 1], inRegion.map { it.substringAfter('/').replace('_', ' ') },
+                selected = inRegion.indexOf(current).takeIf { it >= 0 }) { onPick(inRegion[it]) }
+        }
+    }
+}
+
+private val TZ_REGIONS = listOf("Europe", "America", "Africa", "Asia", "Atlantic", "Australia", "Indian", "Pacific", "Antarctica")
