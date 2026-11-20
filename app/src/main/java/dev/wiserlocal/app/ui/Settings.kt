@@ -540,7 +540,8 @@ fun SystemSettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                         ) { on ->
                             if (on) vm.run { it.setHotWaterChannel(true) }
                             else dialogs.confirm(
-                                "Turn off the hot water channel? The hub will stop controlling hot water.",
+                                "Turn off the hot water channel? The hub will stop controlling hot water, delete the hot water schedule " +
+                                    "and remove hot water from all automations. Turning it back on does not bring them back.",
                                 "Turn off",
                             ) { vm.run { it.setHotWaterChannel(false) } }
                         }
