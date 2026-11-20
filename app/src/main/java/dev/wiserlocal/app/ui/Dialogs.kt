@@ -252,10 +252,15 @@ fun DialogHost.days(title: String, initial: List<String>, onOk: (List<String>) -
                         )
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { chosen = WiserHub.DAYS.toSet() }) { Text("Every day") }
-                    TextButton(onClick = { chosen = WiserHub.DAYS.take(5).toSet() }) { Text("Weekdays") }
-                    TextButton(onClick = { chosen = WiserHub.DAYS.drop(5).toSet() }) { Text("Weekends") }
+                // Wraps whole buttons onto a new line rather than splitting a word.
+                FlowRow {
+                    listOf(
+                        "Every day" to WiserHub.DAYS,
+                        "Weekdays" to WiserHub.DAYS.take(5),
+                        "Weekends" to WiserHub.DAYS.drop(5),
+                    ).forEach { (label, days) ->
+                        TextButton(onClick = { chosen = days.toSet() }) { Text(label, maxLines = 1, softWrap = false) }
+                    }
                 }
             }
         },
