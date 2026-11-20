@@ -72,7 +72,7 @@ fun SettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                     InfoRow("Away mode", "Away temperature and hot water", showChevron = true) { nav.push(Screen.Away) }
                 }
                 RowDivider()
-                InfoRow("Smart modes", "Eco, comfort and open window detection", showChevron = true) { nav.push(Screen.SmartModes) }
+                InfoRow("Smart modes", "Eco and comfort", showChevron = true) { nav.push(Screen.SmartModes) }
                 RowDivider()
                 InfoRow("System settings", "Hub firmware, network, boiler, valve protection, clock", showChevron = true) {
                     nav.push(Screen.SystemSettings)
