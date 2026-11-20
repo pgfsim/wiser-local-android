@@ -404,6 +404,15 @@ class WiserHub(host: String, private val secret: String) {
 
     fun setValveProtection(enabled: Boolean) = patch("System", """{"ValveProtectionEnabled":$enabled}""")
 
+    /**
+     * The heat source type: "Gas", "Oil", "Electric" or "HeatPump". The hub then picks the
+     * boiler's cycle rate itself (3 an hour for oil, 6 for gas).
+     */
+    fun setFuelType(fuel: String) = patch("System/BoilerSettings/", """{"FuelType":"$fuel"}""")
+
+    /** The boiler type: "HeatSourceType_RelayControlled" (Standard) or "HeatSourceType_OpenTherm". */
+    fun setBoilerControlType(type: String) = patch("System/BoilerSettings/", """{"ControlType":"$type"}""")
+
     /** Lets new devices join the hub for [seconds]. */
     fun permitJoin(seconds: Int) = patch("System/RequestPermitJoin", seconds.toString())
 

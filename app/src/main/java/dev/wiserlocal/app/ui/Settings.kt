@@ -466,17 +466,43 @@ fun SystemSettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
         SettingsColumn(padding) {
             val system = vm.state?.system ?: return@SettingsColumn
             Section("Hub") {
-                val rows = buildList {
-                    add("Firmware" to system.firmware)
-                    add("Cloud connection" to system.cloudConnected?.let { if (it) "Connected" else "Not connected" })
-                    addAll(vm.network)
-                    system.boiler.forEach { (key, value) -> add(boilerRow(key, value)) }
-                    add("Brand" to system.brand)
-                    add("OpenTherm link to boiler" to system.openTherm)
+                val rows = buildList<Triple<String, String?, (() -> Unit)?>> {
+                    add(Triple("Firmware", system.firmware, null))
+                    add(Triple("Cloud connection", system.cloudConnected?.let { if (it) "Connected" else "Not connected" }, null))
+                    vm.network.forEach { (label, value) -> add(Triple(label, value, null)) }
+                    system.boiler.forEach { (key, value) ->
+                        val (label, shown) = boilerRow(key, value)
+                        val onClick: (() -> Unit)? = when (key) {
+                            "FuelType" -> {
+                                {
+                                    dialogs.choice("Heat source type", HEAT_SOURCES.map { it.second }, HEAT_SOURCES.indexOfFirst { it.first == value }.takeIf { it >= 0 }) { i ->
+                                        val picked = HEAT_SOURCES[i].first
+                                        if (picked != value) vm.run { it.setFuelType(picked) }
+                                    }
+                                }
+                            }
+                            "ControlType" -> {
+                                {
+                                    dialogs.choice("Boiler type", BOILER_TYPES.map { it.second }, BOILER_TYPES.indexOfFirst { it.first == value }.takeIf { it >= 0 }) { i ->
+                                        val picked = BOILER_TYPES[i].first
+                                        if (picked != value) dialogs.confirm(
+                                            "Change the boiler type to ${BOILER_TYPES[i].second}? Pick OpenTherm only if the boiler is wired to the hub's " +
+                                                "OpenTherm terminals, and Standard only if it is wired to the relay; the wrong one can stop the heating.",
+                                            "Change",
+                                        ) { vm.run { it.setBoilerControlType(picked) } }
+                                    }
+                                }
+                            }
+                            else -> null
+                        }
+                        add(Triple(label, shown, onClick))
+                    }
+                    add(Triple("Brand", system.brand, null))
+                    add(Triple("OpenTherm link to boiler", system.openTherm, null))
                 }.filter { it.second != null }
-                rows.forEachIndexed { index, (label, value) ->
+                rows.forEachIndexed { index, (label, value, onClick) ->
                     if (index > 0) RowDivider()
-                    InfoRow(label, value)
+                    InfoRow(label, value, showChevron = onClick != null, onClick = onClick)
                 }
             }
             system.valveProtection?.let { enabled ->
@@ -518,6 +544,20 @@ fun SystemSettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
 
 private val BOILER_FUELS = setOf("Gas", "Oil", "Electric", "SolidFuel", "Biomass")
 
+/** The heat source types the official app offers, as (hub value, label). */
+private val HEAT_SOURCES = listOf(
+    "Gas" to "Gas boiler",
+    "Oil" to "Oil boiler",
+    "Electric" to "Electric boiler",
+    "HeatPump" to "Heat pump",
+)
+
+/** The boiler types the official app offers, as (hub ControlType, label). */
+private val BOILER_TYPES = listOf(
+    "HeatSourceType_RelayControlled" to "Standard",
+    "HeatSourceType_OpenTherm" to "OpenTherm",
+)
+
 /** Labels a boiler setting the way the official app does. */
 private fun boilerRow(key: String, value: String): Pair<String, String> {
     // The official app calls the fuel type "Heat Source Type".
@@ -528,6 +568,7 @@ private fun boilerRow(key: String, value: String): Pair<String, String> {
         control && value.endsWith("RelayControlled") -> "Standard"
         control && value.endsWith("OpenThermOnOff") -> "OpenTherm (on/off)"
         control && value.endsWith("OpenTherm") -> "OpenTherm"
+        key == "CycleRate" && value.startsWith("CPH_") -> "${value.removePrefix("CPH_")} cycles an hour"
         value == "true" -> "Yes"
         value == "false" -> "No"
         fuel && value in BOILER_FUELS -> "${spaced(value)} boiler"
