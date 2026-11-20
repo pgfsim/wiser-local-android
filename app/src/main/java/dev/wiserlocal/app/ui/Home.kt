@@ -278,7 +278,7 @@ private fun MomentTile(moment: Moment, vm: HubViewModel) {
     ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
-                painterResource(R.drawable.ic_moment),
+                painterResource(momentIcon(moment.iconId, R.drawable.ic_moment)),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(22.dp),
