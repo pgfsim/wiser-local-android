@@ -135,8 +135,15 @@ private fun targetName(domain: String, id: Int, state: HubState): String = when 
     else -> "${spaced(domain)} $id"
 }
 
-/** ("Hot water", "Heating state is Off"). Hot water's own state drops the repeated "water". */
+/** ("Hot water", "State is Off"), ("Away mode", "Is on"), and so on. */
 fun describeTrigger(t: AutomationTrigger, state: HubState): Pair<String, String> {
+    // Away mode is the system's override type being "Away".
+    if (t.domain == "System" && t.property == "OverrideType" && t.compareTo == "Away") {
+        when (t.comparator) {
+            "Equals" -> return "Away mode" to "Is on"
+            "NotEquals" -> return "Away mode" to "Is off"
+        }
+    }
     val property = when (t.property) {
         "WaterHeatingState" -> "State"
         else -> spaced(t.property)
@@ -155,6 +162,12 @@ fun describeTrigger(t: AutomationTrigger, state: HubState): Pair<String, String>
 
 /** ("Living Room", "Boost for 30 min"), ("Hot water", "Off"), and so on. */
 fun describeAutomationAction(a: AutomationAction, state: HubState): Pair<String, String> {
+    if (a.notify != null) return "Notification" to if (a.notify) "Send to phone" else "Off"
+    if (a.waitHhmm != null) return "Wait" to durationText(a.waitHhmm / 100 * 60 + a.waitHhmm % 100)
+    if (a.domain == "System" && a.action == "TriggerMoment") {
+        val moment = a.value.toIntOrNull()?.let { id -> state.moments.firstOrNull { it.id == id } }
+        return "Moment" to "Run “${moment?.name?.trim() ?: "Moment ${a.value}"}”"
+    }
     val target = targetName(a.domain, a.id, state)
     if (a.action != "RequestOverride") return target to listOf(spaced(a.action), a.value).filter { it.isNotEmpty() }.joinToString(": ")
     val value = runCatching { JSONObject(a.value) }.getOrNull() ?: return target to a.value
@@ -173,13 +186,17 @@ fun describeAutomationAction(a: AutomationAction, state: HubState): Pair<String,
     return target to text
 }
 
-/**
- * The hub sends times as plain numbers (3000, 4000 seen so far) whose meaning isn't
- * known yet, so they are shown as sent until a capture with a known clock time pins it down.
- */
+/** "07:05", "sunrise" or "sunset" for one of the hub's automation times. */
+fun automationTimeText(code: Int): String = when (code) {
+    WiserHub.SUNRISE -> "sunrise"
+    WiserHub.SUNSET -> "sunset"
+    else -> "%02d:%02d".format(code / 100, code % 100)
+}
+
 fun describeTime(t: AutomationTime): String = when {
-    t.start != null && t.end != null -> "From time ${t.start} to ${t.end}"
-    t.start != null -> "At time ${t.start}"
+    t.start != null && t.end != null ->
+        "From ${automationTimeText(t.start)} to ${automationTimeText(t.end)}".replace("From s", "From S")
+    t.start != null -> "At ${automationTimeText(t.start)}"
     else -> "At any time"
 }
 

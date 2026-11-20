@@ -131,12 +131,23 @@ data class AutomationTrigger(val domain: String, val id: Int, val property: Stri
 
 /**
  * A time condition. A period has [start] and [end]; a single time has only [start].
- * Times are kept exactly as the hub sends them, as their encoding is not known yet.
+ * Times are HHMM (705 = 07:05), or [WiserHub.SUNRISE] / [WiserHub.SUNSET].
  */
 data class AutomationTime(val start: Int?, val end: Int?, val days: List<String>)
 
-/** One step: [action] on [domain] [id] with [value], usually a JSON string such as {"type":"Boost",...}. */
-data class AutomationAction(val domain: String, val id: Int, val action: String, val value: String)
+/**
+ * One step. Usually [action] on [domain] [id] with [value] (often a JSON string such as
+ * {"type":"Boost",...}); a push notification step has [notify] set, a pause has [waitHhmm]
+ * (102 = 1 hour 2 minutes).
+ */
+data class AutomationAction(
+    val domain: String,
+    val id: Int,
+    val action: String,
+    val value: String,
+    val notify: Boolean? = null,
+    val waitHhmm: Int? = null,
+)
 
 data class HubState(
     val rooms: List<Room>,
@@ -581,11 +592,14 @@ class WiserHub(host: String, private val secret: String) {
         }
         val actions = mutableListOf<AutomationAction>()
         json.arr("Actions").forEachObject { a ->
+            fun key(name: String) = name.takeIf { a.has(it) } ?: name.replaceFirstChar { it.lowercase() }.takeIf { a.has(it) }
             actions += AutomationAction(
                 domain = a.str("Domain") ?: "",
                 id = a.optInt("Id", a.optInt("id")),
                 action = a.str("Action") ?: "",
                 value = a.str("Value") ?: "",
+                notify = key("EnableNotification")?.let { a.optBoolean(it) },
+                waitHhmm = key("Wait")?.let { a.optInt(it) },
             )
         }
         return AutomationDetail(json.str("TriggerMode") ?: "All", triggers, times, actions)
@@ -849,6 +863,10 @@ class WiserHub(host: String, private val secret: String) {
         const val SCHEDULE_OFF = -200
 
         /** Day names exactly as the hub's schedule API spells them. */
+        /** Automation time codes for sunrise and sunset; other times are HHMM. */
+        const val SUNRISE = 3000
+        const val SUNSET = 4000
+
         val DAYS = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
         private val BASE_PATHS = listOf("/data/v2/domain/", "/data/domain/")
