@@ -46,6 +46,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.wiserlocal.app.BuildConfigInfo
 import dev.wiserlocal.app.Device
+import dev.wiserlocal.app.HubState
 import dev.wiserlocal.app.R
 import dev.wiserlocal.app.WiserHub
 import kotlin.math.roundToInt
@@ -62,7 +63,7 @@ fun SettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
             Section {
                 InfoRow("Hub connection", vm.prefs.host.ifEmpty { "Not set up" }, showChevron = true) { nav.push(Screen.HubConnection) }
                 RowDivider()
-                InfoRow("Rooms", "Add, rename and delete rooms; choose their schedules", showChevron = true) { nav.push(Screen.Rooms) }
+                InfoRow("Rooms", "Names, schedules, window detection and devices", showChevron = true) { nav.push(Screen.Rooms) }
                 RowDivider()
                 InfoRow("Devices", "Thermostats and valves: battery, signal, lock, identify", showChevron = true) { nav.push(Screen.Devices) }
             }
@@ -277,46 +278,11 @@ fun RoomsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
     DetailScaffold("Rooms", snackbar, onBack = { nav.pop() }, loading = vm.loading) { padding ->
         SettingsColumn(padding) {
             val state = vm.state ?: return@SettingsColumn
-            val heating = vm.schedules.filter { it.heating }
             Section {
                 state.rooms.forEachIndexed { index, room ->
                     if (index > 0) RowDivider()
-                    val schedule = heating.firstOrNull { it.id == room.scheduleId }
-                    InfoRow(
-                        room.name,
-                        schedule?.let { "Follows “${it.name}”" } ?: "No schedule",
-                        showChevron = true,
-                    ) {
-                        val actions = buildList {
-                            add("Rename" to {
-                                dialogs.prompt("Rename ${room.name}", room.name) { name -> vm.run { it.renameRoom(room.id, name) } }
-                            })
-                            if (heating.isNotEmpty() && state.features.assignableSchedules) add("Change schedule" to {
-                                dialogs.choice(
-                                    "Schedule for ${room.name}",
-                                    heating.map { it.name.ifEmpty { "Schedule" } },
-                                    heating.indexOfFirst { it.id == room.scheduleId },
-                                ) { which ->
-                                    val chosen = heating[which]
-                                    if (chosen.id != room.scheduleId) {
-                                        // The hub wants every room for the schedule, not just the new one.
-                                        val users = state.rooms.filter { it.scheduleId == chosen.id }.map { it.id } + room.id
-                                        vm.run { it.assignSchedule(chosen, users) }
-                                    }
-                                }
-                            })
-                            add("Edit schedule" to {
-                                if (room.scheduleId > 0) {
-                                    nav.push(Screen.ScheduleEditor(room.scheduleId, heating = true, title = "${room.name} schedule"))
-                                }
-                            })
-                            add("Delete" to {
-                                dialogs.confirm("Delete the room “${room.name}” from the hub? This cannot be undone.", "Delete") {
-                                    vm.run { it.deleteRoom(room.id) }
-                                }
-                            })
-                        }
-                        dialogs.choice(room.name, actions.map { it.first }) { actions[it].second() }
+                    InfoRow(room.name, deviceCount(state.devices.count { it.roomId == room.id }), showChevron = true) {
+                        nav.push(Screen.RoomDetails(room.id))
                     }
                 }
                 if (state.rooms.isNotEmpty()) RowDivider()
@@ -324,12 +290,92 @@ fun RoomsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                     dialogs.prompt("Add a room", "") { name -> vm.run("Room “$name” added") { it.createRoom(name) } }
                 }
             }
-            Text(
-                "Heating schedules are on the Automations tab.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp),
-            )
+        }
+    }
+}
+
+private fun deviceCount(n: Int) = when (n) {
+    0 -> "No devices"
+    1 -> "1 device"
+    else -> "$n devices"
+}
+
+@Composable
+fun RoomDetailsScreen(vm: HubViewModel, snackbar: SnackbarHostState, roomId: Int) {
+    val nav = LocalNav.current
+    val dialogs = LocalDialogs.current
+    val room = vm.state?.rooms?.firstOrNull { it.id == roomId }
+    DetailScaffold(room?.name ?: "Room", snackbar, onBack = { nav.pop() }, loading = vm.loading) { padding ->
+        SettingsColumn(padding) {
+            val state = vm.state ?: return@SettingsColumn
+            if (room == null) {
+                Text("This room is no longer on the hub.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                return@SettingsColumn
+            }
+            val heating = vm.schedules.filter { it.heating }
+            val schedule = heating.firstOrNull { it.id == room.scheduleId }
+
+            Section {
+                InfoRow("Name", room.name, showChevron = true) {
+                    dialogs.prompt("Rename ${room.name}", room.name) { name -> vm.run { it.renameRoom(room.id, name) } }
+                }
+                RowDivider()
+                InfoRow("Schedule", schedule?.name?.ifEmpty { "Schedule" } ?: "No schedule", showChevron = true) {
+                    val actions = buildList {
+                        if (heating.isNotEmpty() && state.features.assignableSchedules) add("Change schedule" to {
+                            dialogs.choice(
+                                "Schedule for ${room.name}",
+                                heating.map { it.name.ifEmpty { "Schedule" } },
+                                heating.indexOfFirst { it.id == room.scheduleId },
+                            ) { which ->
+                                val chosen = heating[which]
+                                if (chosen.id != room.scheduleId) {
+                                    // The hub wants every room for the schedule, not just the new one.
+                                    val users = state.rooms.filter { it.scheduleId == chosen.id }.map { it.id } + room.id
+                                    vm.run { it.assignSchedule(chosen, users) }
+                                }
+                            }
+                        })
+                        if (room.scheduleId > 0) add("Edit schedule" to {
+                            nav.push(Screen.ScheduleEditor(room.scheduleId, heating = true, title = "${room.name} schedule"))
+                        })
+                    }
+                    when (actions.size) {
+                        0 -> {}
+                        1 -> actions[0].second()
+                        else -> dialogs.choice("Schedule", actions.map { it.first }) { actions[it].second() }
+                    }
+                }
+                if (state.features.openWindowDetection) room.windowDetection?.let { enabled ->
+                    RowDivider()
+                    SwitchRow(
+                        "Open window detection",
+                        if (room.windowOpen) "Window open" else "Window closed",
+                        enabled,
+                    ) { on -> vm.run { it.setWindowDetection(room.id, on) } }
+                }
+            }
+
+            val devices = state.devices.filter { it.roomId == room.id }
+            Section("Devices") {
+                if (devices.isEmpty()) InfoRow("No devices")
+                devices.forEachIndexed { index, device ->
+                    if (index > 0) RowDivider()
+                    InfoRow(
+                        deviceName(device, withRoom = false),
+                        deviceDetails(device).firstOrNull(),
+                        showChevron = true,
+                    ) { nav.push(Screen.DeviceDetails(device.id)) }
+                }
+            }
+
+            Section {
+                InfoRow("Delete room", "Removes the room from the hub. Its devices stay paired.") {
+                    dialogs.confirm("Delete the room “${room.name}” from the hub? This cannot be undone.", "Delete") {
+                        vm.run("Room “${room.name}” deleted", onSuccess = { nav.pop() }) { it.deleteRoom(room.id) }
+                    }
+                }
+            }
         }
     }
 }
@@ -366,21 +412,7 @@ fun DevicesScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
     DetailScaffold("Devices", snackbar, onBack = { nav.pop() }, loading = vm.loading) { padding ->
         SettingsColumn(padding) {
             val state = vm.state ?: return@SettingsColumn
-            state.devices.forEach { device ->
-                Section {
-                    InfoRow(deviceName(device), deviceDetails(device).joinToString("\n"))
-                    device.locked?.takeIf { state.features.deviceLock }?.let { locked ->
-                        RowDivider()
-                        SwitchRow("Device lock", "Locks the buttons on the device.", locked) { on ->
-                            vm.run { it.setDeviceLock(device.id, on) }
-                        }
-                    }
-                    if (device.type != "Controller") {
-                        RowDivider()
-                        InfoRow("Identify", "Makes the device flash so you can find it.", showChevron = true) { vm.identify(device) }
-                    }
-                }
-            }
+            state.devices.forEach { device -> DeviceSection(vm, state, device) }
             Section {
                 InfoRow("Add a device", "Lets a new thermostat or radiator valve join the hub.", showChevron = true) {
                     dialogs.confirm(
@@ -389,6 +421,39 @@ fun DevicesScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                     ) { vm.run("The hub is accepting new devices for two minutes") { it.permitJoin(120) } }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DeviceSection(vm: HubViewModel, state: HubState, device: Device, withRoom: Boolean = true) {
+    Section {
+        InfoRow(deviceName(device, withRoom), deviceDetails(device).joinToString("\n"))
+        device.locked?.takeIf { state.features.deviceLock }?.let { locked ->
+            RowDivider()
+            SwitchRow("Device lock", "Locks the buttons on the device.", locked) { on ->
+                vm.run { it.setDeviceLock(device.id, on) }
+            }
+        }
+        if (device.type != "Controller") {
+            RowDivider()
+            InfoRow("Identify", "Makes the device flash so you can find it.", showChevron = true) { vm.identify(device) }
+        }
+    }
+}
+
+@Composable
+fun DeviceDetailsScreen(vm: HubViewModel, snackbar: SnackbarHostState, deviceId: Int) {
+    val nav = LocalNav.current
+    val device = vm.state?.devices?.firstOrNull { it.id == deviceId }
+    DetailScaffold(device?.let { deviceName(it, withRoom = false) } ?: "Device", snackbar, onBack = { nav.pop() }, loading = vm.loading) { padding ->
+        SettingsColumn(padding) {
+            val state = vm.state ?: return@SettingsColumn
+            if (device == null) {
+                Text("This device is no longer on the hub.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                return@SettingsColumn
+            }
+            DeviceSection(vm, state, device)
         }
     }
 }
@@ -441,17 +506,6 @@ fun SmartModesScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                         if (system.ecoMode != null) RowDivider()
                         SwitchRow("Comfort mode", "Starts heating early so rooms reach their target at the scheduled time.", enabled) { on ->
                             vm.run { it.setComfortMode(on) }
-                        }
-                    }
-                }
-            }
-            val windowRooms = if (state.features.openWindowDetection) state.rooms.filter { it.windowDetection != null } else emptyList()
-            if (windowRooms.isNotEmpty()) {
-                Section("Open window detection") {
-                    windowRooms.forEachIndexed { index, room ->
-                        if (index > 0) RowDivider()
-                        SwitchRow(room.name, if (room.windowOpen) "Window open" else "Window closed", room.windowDetection == true) { on ->
-                            vm.run { it.setWindowDetection(room.id, on) }
                         }
                     }
                 }

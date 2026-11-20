@@ -98,6 +98,8 @@ data class Device(
     val id: Int,
     /** Hub product type, e.g. "RoomStat", "iTRV" or "Controller". */
     val type: String,
+    /** The room this device is in, or null if it isn't in one. */
+    val roomId: Int? = null,
     val roomName: String?,
     /** Battery level as the hub words it, e.g. "Normal" or "Low". */
     val battery: String?,
@@ -209,15 +211,17 @@ class WiserHub(host: String, private val secret: String) {
         json.optJSONArray("SmartValve").forEachObject { readings[it.optInt("id")] = it }
 
         val rooms = mutableListOf<Room>()
-        val deviceRooms = mutableMapOf<Int, String>()
+        val deviceRooms = mutableMapOf<Int, Int>()
+        val roomNames = mutableMapOf<Int, String>()
         json.optJSONArray("Room").forEachObject { o ->
             val id = o.getInt("id")
             val name = o.optString("Name", "Room $id")
+            roomNames[id] = name
             val statId = o.optInt("RoomStatId", 0)
-            if (statId > 0) deviceRooms[statId] = name
+            if (statId > 0) deviceRooms[statId] = id
             for (key in listOf("SmartValveIds", "HeatingActuatorIds", "UfhRelayIds")) {
                 val ids = o.optJSONArray(key) ?: continue
-                for (i in 0 until ids.length()) deviceRooms[ids.optInt(i)] = name
+                for (i in 0 until ids.length()) deviceRooms[ids.optInt(i)] = id
             }
             val origin = o.optString("SetpointOrigin", o.optString("SetPointOrigin"))
             val overrideType = o.optString("OverrideType", "None")
@@ -289,10 +293,13 @@ class WiserHub(host: String, private val secret: String) {
         val devices = mutableListOf<Device>()
         json.optJSONArray("Device").forEachObject { o ->
             val id = o.optInt("id")
+            // Heating devices are listed on the room; others (plugs, lights) carry a RoomId.
+            val roomId = deviceRooms[id] ?: o.optInt("RoomId", 0).takeIf { it > 0 && it in roomNames }
             devices += Device(
                 id = id,
                 type = o.optString("ProductType", "Device"),
-                roomName = deviceRooms[id],
+                roomId = roomId,
+                roomName = roomId?.let { roomNames[it] },
                 battery = o.optStringOrNull("BatteryLevel"),
                 batteryVolts = if (o.has("BatteryVoltage")) o.optInt("BatteryVoltage") / 10.0 else null,
                 signal = o.optStringOrNull("DisplayedSignalStrength"),

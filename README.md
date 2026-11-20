@@ -24,11 +24,12 @@ The app has four tabs, plus a settings page behind the gear icon:
   30 days against the outdoor minimum and maximum, activity counts, and the heat report: room temperatures,
   set points and outdoor temperature by day, week or month, drawn in the app.
   Tap or drag on the chart for the values at a time, and tap a name to hide it.
-- **Settings:** hub connection (with automatic hub discovery), rooms (add,
-  rename, delete, choose a schedule), devices (battery, signal, readings,
-  firmware, button lock, identify, add a new device), away mode (away
-  temperature, whether hot water turns off too), smart modes (eco, comfort,
-  open window detection per room), system settings (hub firmware, cloud and
+- **Settings:** hub connection (with automatic hub discovery), rooms (each
+  with its device count; a room page to rename it, choose or edit its schedule,
+  switch open window detection, see its devices and delete it), devices
+  (battery, signal, readings, firmware, button lock, identify, add a new
+  device), away mode (away temperature, whether hot water turns off too),
+  smart modes (eco, comfort), system settings (hub firmware, cloud and
   Wi-Fi details, changing the heat source and boiler type, OpenTherm hot water and
   heating water temperatures, hot water channel, legacy PowerTag energy mode, brand, OpenTherm, valve
   protection, hub clock, boiler readings over OpenTherm), home screen

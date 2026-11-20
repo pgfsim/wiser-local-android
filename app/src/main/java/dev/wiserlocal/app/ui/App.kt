@@ -36,6 +36,8 @@ sealed interface Screen {
     data object HubConnection : Screen
     data object Rooms : Screen
     data object Devices : Screen
+    data class RoomDetails(val roomId: Int) : Screen
+    data class DeviceDetails(val deviceId: Int) : Screen
     data object Away : Screen
     data object SmartModes : Screen
     data object SystemSettings : Screen
@@ -89,6 +91,8 @@ fun WiserApp(vm: HubViewModel) {
             Screen.HubConnection -> HubConnectionScreen(vm, snackbar)
             Screen.Rooms -> RoomsScreen(vm, snackbar)
             Screen.Devices -> DevicesScreen(vm, snackbar)
+            is Screen.RoomDetails -> RoomDetailsScreen(vm, snackbar, screen.roomId)
+            is Screen.DeviceDetails -> DeviceDetailsScreen(vm, snackbar, screen.deviceId)
             Screen.Away -> AwayScreen(vm, snackbar)
             Screen.SmartModes -> SmartModesScreen(vm, snackbar)
             Screen.SystemSettings -> SystemSettingsScreen(vm, snackbar)
