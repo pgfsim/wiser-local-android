@@ -179,8 +179,13 @@ fun InfoRow(
 }
 
 @Composable
-fun SwitchRow(title: String, detail: String? = null, checked: Boolean, onChange: (Boolean) -> Unit) {
-    InfoRow(title, detail, trailing = { Switch(checked = checked, onCheckedChange = onChange) }) { onChange(!checked) }
+fun SwitchRow(title: String, detail: String? = null, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
+    InfoRow(
+        title,
+        detail,
+        trailing = { Switch(checked = checked, onCheckedChange = onChange, enabled = enabled) },
+        onClick = if (enabled) ({ onChange(!checked) }) else null,
+    )
 }
 
 @Composable

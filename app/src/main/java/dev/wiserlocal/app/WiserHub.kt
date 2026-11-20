@@ -82,6 +82,13 @@ data class SystemInfo(
     val autoDaylightSaving: Boolean?,
     /** Hub clock offset from UTC, as the hub stores it (believed to be minutes). */
     val timeZoneOffset: Int?,
+    /** Whether the hub's hot water channel is in use, or null if this hub can't switch it. */
+    val hotWaterChannel: Boolean? = null,
+    /**
+     * "Legacy PowerTag energy mode" (the hub's Zigbee LegacyLongPacketSupport), or null
+     * if the hub doesn't report it.
+     */
+    val legacyPowerTagMode: Boolean? = null,
 )
 
 data class Device(
@@ -264,6 +271,12 @@ class WiserHub(host: String, private val secret: String) {
             valveProtection = sys.optBooleanOrNull("ValveProtectionEnabled"),
             autoDaylightSaving = sys.optBooleanOrNull("AutomaticDaylightSaving"),
             timeZoneOffset = if (sys.has("TimeZoneOffset")) sys.optInt("TimeZoneOffset") else null,
+            // The official app only offers the switch when the hub says the channel can be switched.
+            hotWaterChannel = if (sys.optBoolean("HotWaterChannelSupported")) sys.optBoolean("HotWaterEnabled", true) else null,
+            legacyPowerTagMode = json.optJSONObject("Zigbee")?.optStringOrNull("LegacyLongPacketSupport")
+                ?.takeUnless { it.contains("NotSupported") }
+                // The official app counts both "enabled" states (automatically once, or by the user) as on.
+                ?.let { it.startsWith("Enabled") },
         )
 
         val devices = mutableListOf<Device>()
@@ -424,6 +437,12 @@ class WiserHub(host: String, private val secret: String) {
     fun setTimeZoneOffset(offset: Int) = patch("System", """{"TimeZoneOffset":$offset}""")
 
     fun setValveProtection(enabled: Boolean) = patch("System", """{"ValveProtectionEnabled":$enabled}""")
+
+    /** Turns the hub's hot water channel on or off, as the official app does. */
+    fun setHotWaterChannel(enabled: Boolean) = patch("System/HotWaterEnabled", enabled.toString())
+
+    /** "Legacy PowerTag energy mode": lets older PowerTag energy meters report over Zigbee. */
+    fun setLegacyPowerTagMode(enabled: Boolean) = patch("Zigbee/RequestLegacyLongPacketSupport", enabled.toString())
 
     /**
      * The heat source type: "Gas", "Oil", "Electric" or "HeatPump". The hub then picks the
@@ -638,7 +657,7 @@ class WiserHub(host: String, private val secret: String) {
         )
     }
 
-    /** "Domestic Hot Water Setpoint", in °C. Sent the way the Home Assistant integration does. */
+    /** "Domestic Hot Water Setpoint", in °C. */
     fun setOpenThermHotWater(tempC: Double) = setOpenThermParameter("dhwSetpoint", tempC)
 
     /** "Max. Central Heating Water Temperature", in °C. */
@@ -647,8 +666,8 @@ class WiserHub(host: String, private val secret: String) {
     private fun setOpenThermParameter(key: String, tempC: Double) {
         val body = """{"$key":${(tempC * 10).roundToInt()}}"""
         // Newer firmware spells it openTherm; older firmware opentherm.
-        attempt("PATCH", "/data/v2/openTherm/preDefinedRemoteBoilerParameters", body)
-            ?: attempt("PATCH", "/data/v2/opentherm/preDefinedRemoteBoilerParameters", body)
+        attempt("PATCH", "/data/v2/openTherm/preDefinedRemoteBoilerParameters/", body)
+            ?: attempt("PATCH", "/data/v2/opentherm/preDefinedRemoteBoilerParameters/", body)
             ?: throw IOException("This hub does not offer OpenTherm settings")
     }
 
@@ -908,7 +927,7 @@ class WiserHub(host: String, private val secret: String) {
         /** Hub values are tenths of a degree; out-of-range values mean "no reading". */
         private fun fromHub(raw: Int): Double? = if (raw in -400..1999) raw / 10.0 else null
 
-        private val BOILER_KEY = Regex("HeatSource|ControlType|Boiler|Fuel|HydronicChannel|HotWaterChannel")
+        private val BOILER_KEY = Regex("HeatSource|ControlType|Boiler|Fuel|HydronicChannel")
 
         /**
          * Everything in the hub's "BoilerSettings" block, plus any other simple

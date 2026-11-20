@@ -526,6 +526,35 @@ fun SystemSettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                     }
                 }
             }
+            if (system.hotWaterChannel != null || system.legacyPowerTagMode != null) {
+                Section("Channels") {
+                    system.hotWaterChannel?.let { enabled ->
+                        // The official app greys this out when an Aidoo Pro heat pump is paired.
+                        val aidoo = vm.state?.devices.orEmpty().any { it.type.contains("Aidoo", ignoreCase = true) }
+                        SwitchRow(
+                            "Hot water channel",
+                            if (aidoo) "Not available while an Aidoo Pro heat pump is paired."
+                            else "Turn off if the hub doesn't control a hot water cylinder.",
+                            enabled,
+                            enabled = !aidoo,
+                        ) { on ->
+                            if (on) vm.run { it.setHotWaterChannel(true) }
+                            else dialogs.confirm(
+                                "Turn off the hot water channel? The hub will stop controlling hot water.",
+                                "Turn off",
+                            ) { vm.run { it.setHotWaterChannel(false) } }
+                        }
+                    }
+                    system.legacyPowerTagMode?.let { enabled ->
+                        if (system.hotWaterChannel != null) RowDivider()
+                        SwitchRow(
+                            "Legacy PowerTag energy mode",
+                            "Lets older PowerTag energy meters send their readings to the hub.",
+                            enabled,
+                        ) { on -> vm.run { it.setLegacyPowerTagMode(on) } }
+                    }
+                }
+            }
             if (system.autoDaylightSaving != null || system.timeZoneOffset != null) {
                 Section("Hub clock") {
                     system.autoDaylightSaving?.let { enabled ->

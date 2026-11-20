@@ -30,7 +30,7 @@ The app has four tabs, plus a settings page behind the gear icon:
   temperature, whether hot water turns off too), smart modes (eco, comfort,
   open window detection per room), system settings (hub firmware, cloud and
   Wi-Fi details, changing the heat source and boiler type, OpenTherm hot water and
-  heating water temperatures, brand, OpenTherm, valve
+  heating water temperatures, hot water channel, legacy PowerTag energy mode, brand, OpenTherm, valve
   protection, hub clock, boiler readings over OpenTherm), home screen
   favourites, and light or dark theme.
 - **Home screen widget:** current and target temperature for one room.
@@ -96,7 +96,9 @@ in tenths of a degree.
 | Away settings | `PATCH System` `{"AwayModeSetPointLimit":160}` / `{"AwayModeAffectsHotWater":"true"}` |
 | Valve protection / clock | `PATCH System` `{"ValveProtectionEnabled":true}` / `{"AutomaticDaylightSaving":"true"}` / `{"TimeZoneOffset":0}` |
 | Heat source / boiler type | `PATCH System/BoilerSettings/` `{"FuelType":"Oil"}` (Gas, Oil, Electric, HeatPump; the hub then sets the cycle rate) / `{"ControlType":"HeatSourceType_OpenTherm"}` (or `HeatSourceType_RelayControlled`, shown as Standard) |
-| OpenTherm hot water / max heating water temperature | `PATCH /data/v2/openTherm/preDefinedRemoteBoilerParameters` `{"dhwSetpoint":600}` / `{"maxChSetpoint":650}` (tenths of a degree; format from the Home Assistant integration, not yet seen from the official app) |
+| OpenTherm hot water / max heating water temperature | `PATCH /data/v2/openTherm/preDefinedRemoteBoilerParameters/` `{"dhwSetpoint":600}` / `{"maxChSetpoint":650}` (tenths of a degree) |
+| Hot water channel on / off | `PATCH System/HotWaterEnabled` `true` / `false` (offered when `System.HotWaterChannelSupported`) |
+| Legacy PowerTag energy mode | `PATCH Zigbee/RequestLegacyLongPacketSupport` `true` / `false` (read from `Zigbee.LegacyLongPacketSupport`) |
 | Run a Moment | `PATCH System` `{"TriggerMoment":1}` |
 | Create Moment | `POST Moment?Name=Bedtime&IconId=0` `{"Domain":"HotWater","Id":2,"Action":"RequestOverride","Value":"{\"type\":\"Manual\",\"setPoint\":-200}"}` |
 | Read / change a Moment's action | `GET Moment/{id}` / `PATCH Moment/{id}?Name=Bedtime&IconId=51` with the same body as Create |
