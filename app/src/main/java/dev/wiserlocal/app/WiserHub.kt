@@ -328,11 +328,9 @@ class WiserHub(host: String, private val secret: String) {
     /** Drops any manual override or boost so the room follows its schedule again. */
     fun resumeRoomSchedule(roomId: Int) = patch("Room/$roomId", CANCEL_OVERRIDE)
 
-    /** Raises the room's target by [deltaC] for [minutes], then reverts. */
-    fun boostRoom(roomId: Int, deltaC: Double, minutes: Int) = patch(
-        "Room/$roomId",
-        """{"RequestOverride":{"Type":"Boost","DurationMinutes":$minutes,"IncreaseSetPointBy":${(deltaC * 10).roundToInt()}}}""",
-    )
+    /** Boosts the room for [minutes], then reverts. The hub decides how much, as with the official app. */
+    fun boostRoom(roomId: Int, minutes: Int) =
+        patch("Room/$roomId/RequestOverride/", """{"Type":"Boost","DurationMinutes":$minutes}""")
 
     fun setRoomMode(roomId: Int, mode: RoomMode) {
         patch("Room/$roomId", CANCEL_OVERRIDE)
@@ -359,8 +357,7 @@ class WiserHub(host: String, private val secret: String) {
         patch("Room/$roomId", JSONObject().put("Name", name).toString())
 
     fun createRoom(name: String) {
-        // The reference library sends a lower-case "name" key when creating a room.
-        request("POST", "Room", JSONObject().put("name", name).toString())
+        request("POST", "Room/", JSONObject().put("Name", name).toString())
     }
 
     /** Removes the room from the hub. Its devices stay paired but unassigned. */
@@ -413,13 +410,10 @@ class WiserHub(host: String, private val secret: String) {
 
     /** Away mode drops every room to the hub's away temperature until switched off. */
     fun setAway(enabled: Boolean) =
-        patch("System", """{"RequestOverride":{"Type":${if (enabled) 2 else 0}}}""")
+        patch("System/RequestOverride", """{"Type":"${if (enabled) "Away" else "None"}"}""")
 
-    /** Raises every room's target by [deltaC] for [minutes]. */
-    fun boostAllRooms(deltaC: Double, minutes: Int) = patch(
-        "System",
-        """{"RequestOverride":{"Type":"Boost","DurationMinutes":$minutes,"IncreaseSetPointBy":${(deltaC * 10).roundToInt()}}}""",
-    )
+    /** Boosts every room for an hour; the official app offers no other length. */
+    fun boostAllRooms() = patch("System/RequestOverride", """{"Type":"Boost","DurationMinutes":60}""")
 
     /** Cancels every boost and manual override in the house. */
     fun cancelAllOverrides() = patch("System", """{"RequestOverride":{"Type":"CancelUserOverrides"}}""")
@@ -429,7 +423,7 @@ class WiserHub(host: String, private val secret: String) {
 
     // The reference library sends these two flags as the strings "true"/"false".
     fun setAwayAffectsHotWater(enabled: Boolean) =
-        patch("System", """{"AwayModeAffectsHotWater":"$enabled"}""")
+        patch("System/AwayModeAffectsHotWater", enabled.toString())
 
     fun setAutoDaylightSaving(enabled: Boolean) =
         patch("System", """{"AutomaticDaylightSaving":"$enabled"}""")

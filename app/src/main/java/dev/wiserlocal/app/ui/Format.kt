@@ -13,8 +13,6 @@ import java.util.Date
 /** Durations offered for boosts and timed holds, in minutes. */
 val DURATIONS = listOf(30, 60, 120, 180)
 
-/** Same step the official app uses for a room boost. */
-const val BOOST_DELTA_C = 2.0
 
 /** Most changes a Moment can hold in the official app. */
 const val MAX_MOMENT_ACTIONS = 60

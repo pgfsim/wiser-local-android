@@ -81,8 +81,8 @@ fun RoomCard(room: Room, vm: HubViewModel, full: Boolean, modifier: Modifier = M
 
     fun pickBoost() = dialogs.duration(
         "Boost ${room.name}",
-        label = { "+${BOOST_DELTA_C.toInt()}° for ${durationText(it)}" },
-    ) { minutes -> vm.run { it.boostRoom(room.id, BOOST_DELTA_C, minutes) } }
+        label = { "Boost for ${durationText(it)}" },
+    ) { minutes -> vm.run { it.boostRoom(room.id, minutes) } }
 
     fun pickMode() {
         val modes = RoomMode.entries

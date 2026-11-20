@@ -256,12 +256,9 @@ private fun StatusCard(state: HubState, vm: HubViewModel) {
                 Switch(checked = system.away, onCheckedChange = { on -> vm.run { it.setAway(on) } })
             }
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = {
-                    dialogs.duration(
-                        "Boost all rooms",
-                        label = { "+${BOOST_DELTA_C.toInt()}° for ${durationText(it)}" },
-                    ) { minutes -> vm.run { it.boostAllRooms(BOOST_DELTA_C, minutes) } }
-                }) { Text("Boost all rooms") }
+                FilledTonalButton(onClick = { vm.run("All rooms boosted for an hour") { it.boostAllRooms() } }) {
+                    Text("Boost all rooms")
+                }
                 OutlinedButton(onClick = { vm.run("Overrides cancelled") { it.cancelAllOverrides() } }) {
                     Text("Cancel overrides")
                 }

@@ -84,16 +84,16 @@ in tenths of a degree.
 | Resume schedule | `PATCH Room/{id}` `{"RequestOverride":{"Type":"None"}}` |
 | Boost hot water | `PATCH HotWater/{id}` `{"RequestOverride":{"Type":"Manual","DurationMinutes":60,"SetPoint":1100}}` |
 | Cancel boost | `PATCH HotWater/{id}` `{"RequestOverride":{"Type":"None"}}` |
-| Boost room | `PATCH Room/{id}` `{"RequestOverride":{"Type":"Boost","DurationMinutes":60,"IncreaseSetPointBy":20}}` |
+| Boost room | `PATCH Room/{id}/RequestOverride/` `{"Type":"Boost","DurationMinutes":60}` (the hub picks the increase) |
 | Room mode | `PATCH Room/{id}` `{"Mode":"Auto"}` or `{"Mode":"Manual"}` |
 | Window detection | `PATCH Room/{id}` `{"WindowDetectionActive":true}` |
 | Hot water mode | `PATCH HotWater/{id}` `{"Mode":"Manual","RequestOverride":{"Type":"None"}}` |
-| Away mode | `PATCH System` `{"RequestOverride":{"Type":2}}` (`0` to cancel) |
+| Away mode | `PATCH System/RequestOverride` `{"Type":"Away"}` / `{"Type":"None"}` |
 | Eco / Comfort mode | `PATCH System` `{"EcoModeEnabled":true}` / `{"ComfortModeEnabled":true}` |
 | Timed hold | `PATCH Room/{id}` `{"RequestOverride":{"Type":"Manual","DurationMinutes":60,"SetPoint":200}}` |
-| Rename / add / delete room | `PATCH Room/{id}` `{"Name":"Study"}` / `POST Room` `{"name":"Study"}` / `DELETE Room/{id}` |
-| Boost all / cancel all | `PATCH System` `{"RequestOverride":{"Type":"Boost",...}}` / `{"RequestOverride":{"Type":"CancelUserOverrides"}}` |
-| Away settings | `PATCH System` `{"AwayModeSetPointLimit":160}` / `{"AwayModeAffectsHotWater":"true"}` |
+| Rename / add / delete room | `PATCH Room/{id}` `{"Name":"Study"}` / `POST Room/` `{"Name":"Study"}` / `DELETE Room/{id}` |
+| Boost all / cancel all | `PATCH System/RequestOverride` `{"Type":"Boost","DurationMinutes":60}` / `PATCH System` `{"RequestOverride":{"Type":"CancelUserOverrides"}}` |
+| Away settings | `PATCH System` `{"AwayModeSetPointLimit":160}` / `PATCH System/AwayModeAffectsHotWater` `true` |
 | Valve protection / clock | `PATCH System` `{"ValveProtectionEnabled":true}` / `{"AutomaticDaylightSaving":"true"}` / `{"TimeZoneOffset":0}` |
 | Heat source / boiler type | `PATCH System/BoilerSettings/` `{"FuelType":"Oil"}` (Gas, Oil, Electric, HeatPump; the hub then sets the cycle rate) / `{"ControlType":"HeatSourceType_OpenTherm"}` (or `HeatSourceType_RelayControlled`, shown as Standard) |
 | OpenTherm hot water / max heating water temperature | `PATCH /data/v2/openTherm/preDefinedRemoteBoilerParameters/` `{"dhwSetpoint":600}` / `{"maxChSetpoint":650}` (tenths of a degree) |
