@@ -285,7 +285,6 @@ fun RoomsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                     InfoRow(
                         room.name,
                         schedule?.let { "Follows “${it.name}”" } ?: "No schedule",
-                        icon = flameIcon(),
                         showChevron = true,
                     ) {
                         val actions = buildList {
