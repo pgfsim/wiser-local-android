@@ -101,6 +101,12 @@ To check an APK came from this project, compare its signing certificate (`apksig
 
 `apksigner` prints the same value in lower case without colons: `46ab156fcfa00cd0cafb35d70e0da86e692a7251d06f4a508f8f01e94330fe6e`.
 
+### Updates in the app
+
+The app looks for a newer release on GitHub once a day, and whenever **Settings → Check for updates** is tapped. If there is one it offers **Update** or **Later**; updating is never required. Before handing the download to Android's installer it checks the release's `.sha256` file and that the APK is this app signed with the same key as the installed copy. Android then asks for confirmation as usual, and the first time it asks to allow installs from Wiser Local.
+
+A debug build or one from another key can't update to a release this way: uninstall it and install the release once. To try the updater against a test server, build with `-PupdateApi=http://host:port` (it requests `/repos/pgfsim/wiser-local-android/releases/latest` there).
+
 ## How it works
 
 Everything hub-related is in [`WiserHub.kt`](app/src/main/java/dev/wiserlocal/app/WiserHub.kt).

@@ -36,6 +36,11 @@ class Prefs(context: Context) {
         get() = sp.getString("favourites", null)?.split(',')?.filter { it.isNotBlank() }
         set(v) = sp.edit().putString("favourites", v?.joinToString(",")).apply()
 
+    /** When the app last looked for an update by itself, in phone time. */
+    var lastUpdateCheck: Long
+        get() = sp.getLong("lastUpdateCheck", 0)
+        set(v) = sp.edit().putLong("lastUpdateCheck", v).apply()
+
     val configured: Boolean get() = host.isNotBlank() && secret.isNotBlank()
 
     fun hub() = WiserHub(host, secret)

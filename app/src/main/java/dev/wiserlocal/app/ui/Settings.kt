@@ -45,6 +45,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.wiserlocal.app.BuildConfigInfo
+import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.wiserlocal.app.Device
 import dev.wiserlocal.app.HubState
 import dev.wiserlocal.app.R
@@ -92,6 +93,14 @@ fun SettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                 InfoRow("Home screen", "Choose and order your favourites", showChevron = true) { nav.push(Screen.HomeLayout) }
                 RowDivider()
                 InfoRow("App theme", themeLabel(vm.theme), showChevron = true) { nav.push(Screen.Theme) }
+            }
+            val updates: UpdateViewModel = viewModel()
+            Section {
+                InfoRow(
+                    "Check for updates",
+                    if (updates.checking) "Checking…" else "Looks for a newer release on GitHub. Updating is optional.",
+                    showChevron = true,
+                ) { updates.checkNow() }
             }
             Text(
                 "Wiser Local ${BuildConfigInfo.versionName(LocalContext.current)}\nTalks to your hub directly over your home network.",

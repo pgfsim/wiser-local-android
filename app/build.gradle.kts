@@ -28,6 +28,11 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "0.2.0"
+
+        // Where the app looks for updates. -PupdateApi=... points it at a test server.
+        val updateApi = (project.findProperty("updateApi") as String?) ?: "https://api.github.com"
+        buildConfigField("String", "UPDATE_API", "\"$updateApi\"")
+        buildConfigField("String", "UPDATE_REPO", "\"pgfsim/wiser-local-android\"")
     }
 
     signingConfigs {
@@ -55,6 +60,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     lint {
@@ -66,6 +72,7 @@ dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2025.08.00")
     implementation(composeBom)
     implementation("androidx.activity:activity-compose:1.10.1")
+    implementation("androidx.core:core:1.16.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.2")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")

@@ -16,6 +16,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -71,14 +72,23 @@ fun WiserApp(vm: HubViewModel) {
     val nav = remember { Navigator() }
     val dialogs = remember { DialogHost() }
     val snackbar = remember { SnackbarHostState() }
+    val updates: UpdateViewModel = viewModel()
 
+    // Clear each message only after its snackbar has gone: clearing it first changes the
+    // effect's key, which cancels the effect and the snackbar with it.
     LaunchedEffect(vm.message) {
         val text = vm.message ?: return@LaunchedEffect
-        vm.message = null
         snackbar.showSnackbar(text)
+        vm.message = null
+    }
+    LaunchedEffect(updates.message) {
+        val text = updates.message ?: return@LaunchedEffect
+        snackbar.showSnackbar(text)
+        updates.message = null
     }
     LaunchedEffect(Unit) {
         if (!vm.configured) nav.push(Screen.HubConnection)
+        updates.checkDaily()
     }
 
     CompositionLocalProvider(LocalDialogs provides dialogs, LocalNav provides nav) {
@@ -104,6 +114,7 @@ fun WiserApp(vm: HubViewModel) {
         }
 
         dialogs.content?.invoke()
+        UpdateDialog(updates)
 
         vm.identifying?.let { device ->
             AlertDialog(
