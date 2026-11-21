@@ -231,8 +231,8 @@ script in the returned page. A change to that page could break it.
   other device types are left to the official app; a Moment using them can be
   run, renamed, given another icon or deleted here but not edited.
 - Icons: the hub stores a number (IconId 0 to 75) for each Moment and automation.
-  This app draws its own icon for each one; the SVGs are in `icons/moment`, and
-  `python tools/icons_to_drawables.py` turns them into the app's drawables.
+  This app draws its own icon for each one, as vector drawables in
+  `app/src/main/res/drawable/moment_icon_<IconId>.xml`.
 - The time zone offset is assumed to be in minutes from UTC.
 - Whether a firmware update is pending is not shown, because the hub's data
   does not say so clearly.
