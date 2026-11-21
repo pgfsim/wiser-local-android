@@ -96,8 +96,10 @@ Without it, `./gradlew assembleRelease` builds an unsigned APK.
 To check an APK came from this project, compare its signing certificate (`apksigner verify --print-certs wiser-local-vX.Y.Z.apk`) with this SHA-256 fingerprint:
 
 ```
-(added after the first release key is created)
+46:AB:15:6F:CF:A0:0C:D0:CA:FB:35:D7:0E:0D:A8:6E:69:2A:72:51:D0:6F:4A:50:8F:8F:01:E9:43:30:FE:6E
 ```
+
+`apksigner` prints the same value in lower case without colons: `46ab156fcfa00cd0cafb35d70e0da86e692a7251d06f4a508f8f01e94330fe6e`.
 
 ## How it works
 
