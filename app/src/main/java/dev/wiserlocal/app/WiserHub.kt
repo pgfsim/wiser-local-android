@@ -79,6 +79,8 @@ data class SystemInfo(
     val awayAffectsHotWater: Boolean?,
     /** Periodic valve exercise that stops radiator valves seizing. */
     val valveProtection: Boolean?,
+    /** Whether the hub installs firmware updates by itself, or null if it doesn't say. */
+    val autoFirmwareUpdates: Boolean? = null,
     /** IANA time zone the hub follows, such as Europe/London, which sets its summer time. */
     val timeZoneId: String?,
     /** Hub clock offset from UTC in minutes. */
@@ -280,6 +282,7 @@ class WiserHub(host: String, private val secret: String) {
             awayTempC = if (sys.has("AwayModeSetPointLimit")) fromHub(sys.optInt("AwayModeSetPointLimit")) else null,
             awayAffectsHotWater = sys.optBooleanOrNull("AwayModeAffectsHotWater"),
             valveProtection = sys.optBooleanOrNull("ValveProtectionEnabled"),
+            autoFirmwareUpdates = sys.optBooleanOrNull("FotaEnabled"),
             timeZoneId = sys.optStringOrNull("TimeZoneIdentifier"),
             timeZoneOffset = if (sys.has("TimeZoneOffset")) sys.optInt("TimeZoneOffset") else null,
             hubTime = sys.optJSONObject("LocalDateAndTime")?.takeIf { it.has("Time") }
@@ -450,6 +453,12 @@ class WiserHub(host: String, private val secret: String) {
     fun setHubClock(unixSeconds: Long) = patch("System/", """{"UpdateUnixTime":$unixSeconds}""")
 
     fun setTimeZoneOffset(offset: Int) = patch("System/", """{"TimeZoneOffset":$offset}""")
+
+    /** Lets the hub install firmware updates by itself, as the official app does. */
+    fun setAutoFirmwareUpdates(enabled: Boolean) = patch("System/FotaEnabled", enabled.toString())
+
+    /** Restarts the hub; it stops answering for a few minutes. */
+    fun restartHub() = patch("System/RequestReboot", "true")
 
     fun setValveProtection(enabled: Boolean) = patch("System", """{"ValveProtectionEnabled":$enabled}""")
 

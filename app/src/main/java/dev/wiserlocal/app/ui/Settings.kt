@@ -622,6 +622,20 @@ fun SystemSettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                     )
                 }
             }
+            Section("Firmware and restart") {
+                system.autoFirmwareUpdates?.let { enabled ->
+                    SwitchRow("Automatic firmware updates", "The hub installs new firmware by itself when it is released.", enabled) { on ->
+                        vm.run { it.setAutoFirmwareUpdates(on) }
+                    }
+                    RowDivider()
+                }
+                InfoRow("Restart the hub", "It stops answering for a few minutes while it starts up again.", showChevron = true) {
+                    dialogs.confirm(
+                        "Restart the hub? It stops answering for a few minutes while it starts up again.",
+                        "Restart",
+                    ) { vm.run("The hub is restarting") { it.restartHub() } }
+                }
+            }
             system.valveProtection?.let { enabled ->
                 Section {
                     SwitchRow("Valve protection", "Opens and closes radiator valves now and then so they do not seize.", enabled) { on ->

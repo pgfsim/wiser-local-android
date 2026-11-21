@@ -29,7 +29,7 @@ The app has four tabs, plus a settings page behind the gear icon:
   switch open window detection, see its devices and delete it), devices
   (a page each with battery, signal and readings, its room, button lock,
   firmware, identify and delete; add a new device), away mode (away temperature, whether hot water turns off too),
-  smart modes (eco, comfort), system settings (hub firmware, cloud and
+  smart modes (eco, comfort), system settings (hub firmware, automatic firmware updates, restarting the hub, cloud and
   Wi-Fi details, changing the heat source and boiler type, OpenTherm hot water and
   heating water temperatures, hot water channel, legacy PowerTag energy mode, brand, OpenTherm, valve
   protection, hub clock, boiler readings over OpenTherm), home screen
@@ -96,6 +96,8 @@ in tenths of a degree.
 | Boost all / cancel all | `PATCH System/RequestOverride` `{"Type":"Boost","DurationMinutes":60}` / `PATCH System` `{"RequestOverride":{"Type":"CancelUserOverrides"}}` |
 | Away settings | `PATCH System` `{"AwayModeSetPointLimit":160}` / `PATCH System/AwayModeAffectsHotWater` `true` |
 | Valve protection | `PATCH System` `{"ValveProtectionEnabled":true}` |
+| Automatic firmware updates | `PATCH System/FotaEnabled` `true` / `false` |
+| Restart the hub | `PATCH System/RequestReboot` `true` |
 | Hub clock | `PATCH System/` `{"TimeZoneIdentifier":"Europe/London"}` / `{"TimeZoneOffset":0}` (minutes) / `{"UpdateUnixTime":<seconds>}` |
 | Heat source / boiler type | `PATCH System/BoilerSettings/` `{"FuelType":"Oil"}` (Gas, Oil, Electric, HeatPump; the hub then sets the cycle rate) / `{"ControlType":"HeatSourceType_OpenTherm"}` (or `HeatSourceType_RelayControlled`, shown as Standard) |
 | OpenTherm hot water / max heating water temperature | `PATCH /data/v2/openTherm/preDefinedRemoteBoilerParameters/` `{"dhwSetpoint":600}` / `{"maxChSetpoint":650}` (tenths of a degree) |
