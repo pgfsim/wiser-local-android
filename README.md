@@ -69,6 +69,36 @@ Open the folder in Android Studio, or from a terminal with JDK 17 or newer:
 
 The APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
 
+## Releases
+
+Releases are built and signed by GitHub Actions ([release.yml](.github/workflows/release.yml)) when a version tag is pushed. Raise `versionCode` and `versionName` in `app/build.gradle.kts`, commit, then:
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The tag has to match `versionName`. The release gets the signed APK and its SHA-256 checksum.
+
+Every release is signed with the same key, because Android only installs an update signed with the key of the installed version. The key is kept out of the repo. The workflow reads it from four repository secrets: `SIGNING_KEYSTORE_BASE64` (the keystore file, base64-encoded), `SIGNING_STORE_PASSWORD`, `SIGNING_KEY_ALIAS` and `SIGNING_KEY_PASSWORD`.
+
+For a signed release build on your own machine, create a `keystore.properties` file next to `settings.gradle.kts` (it is git-ignored):
+
+```properties
+storeFile=C:/path/to/wiser-local-release.jks
+storePassword=...
+keyAlias=wiser-local
+keyPassword=...
+```
+
+Without it, `./gradlew assembleRelease` builds an unsigned APK.
+
+To check an APK came from this project, compare its signing certificate (`apksigner verify --print-certs wiser-local-vX.Y.Z.apk`) with this SHA-256 fingerprint:
+
+```
+(added after the first release key is created)
+```
+
 ## How it works
 
 Everything hub-related is in [`WiserHub.kt`](app/src/main/java/dev/wiserlocal/app/WiserHub.kt).

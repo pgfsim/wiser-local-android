@@ -1,7 +1,20 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+// Release signing. The key never goes in the repo: the values come from environment
+// variables (GitHub Actions) or from keystore.properties next to settings.gradle.kts
+// (local builds; it is git-ignored). Without them, release builds are left unsigned.
+val keystoreProps = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
+fun signingValue(property: String, env: String): String? =
+    System.getenv(env)?.takeIf { it.isNotEmpty() } ?: keystoreProps.getProperty(property)
 
 android {
     namespace = "dev.wiserlocal.app"
@@ -17,9 +30,21 @@ android {
         versionName = "0.2.0"
     }
 
+    signingConfigs {
+        create("release") {
+            signingValue("storeFile", "SIGNING_STORE_FILE")?.let { path ->
+                storeFile = rootProject.file(path)
+                storePassword = signingValue("storePassword", "SIGNING_STORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "SIGNING_KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "SIGNING_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfigs.getByName("release").takeIf { it.storeFile != null }?.let { signingConfig = it }
         }
     }
 
