@@ -25,6 +25,15 @@
             </intent-filter>
         </activity>
 
+        <!-- Runs a launcher shortcut (long-press the app icon) without showing anything. -->
+        <activity
+            android:name=".ShortcutActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <receiver
             android:name=".TempWidgetProvider"
             android:exported="true"

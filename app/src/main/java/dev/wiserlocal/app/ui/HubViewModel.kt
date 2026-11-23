@@ -161,6 +161,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                 } else if (system) OpenThermInfo.NONE else null
                 Loaded(state, schedules, actions, automations, net, boiler)
             }
+            result.getOrNull()?.let { dev.wiserlocal.app.AppShortcuts.publish(getApplication(), it.state) }
             main.post {
                 inFlight--
                 if (actionError != null) {

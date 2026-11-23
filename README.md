@@ -36,6 +36,10 @@ The app has four tabs, plus a settings page behind the gear icon:
   favourites, and light or dark theme.
 - **Home screen widget:** current and target temperature for one room.
 - **Quick settings tiles:** hot water boost, and away mode.
+- **App icon shortcuts:** long-press the app icon for away mode on/off, hot water
+  boost, boost all rooms and your Moments. They run without opening the app and
+  confirm with a short message; each can be dragged onto the home screen. Only
+  what your hub supports is offered, and launchers show the first four or five.
 
 It only works while the phone can reach the hub, so on your home Wi-Fi or over a
 VPN into your home network.
