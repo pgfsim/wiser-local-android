@@ -833,8 +833,9 @@ fun SystemSettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                 }
             }
             val sysJson = state.domain?.optJSONObject("System")
-            if (hasControls(sysJson, dev.wiserlocal.app.Equipment.SYSTEM)) Section("Comfort, cooling and underfloor") {
-                ControlRows(vm, sysJson!!, 0, dev.wiserlocal.app.Equipment.SYSTEM)
+            val systemControls = dev.wiserlocal.app.Equipment.systemFor(state.domain)
+            if (hasControls(sysJson, systemControls)) Section("Comfort, cooling and underfloor") {
+                ControlRows(vm, sysJson!!, 0, systemControls)
             }
             state.seasonalComfort?.let { sc ->
                 if (hasControls(sc, dev.wiserlocal.app.Equipment.SEASONAL)) Section("Seasonal comfort") {

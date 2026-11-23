@@ -448,6 +448,26 @@ object Equipment {
         },
     )
 
+    /**
+     * The [SYSTEM] settings that matter for this hub: the hub reports these fields whether or not
+     * it has the hardware, so summer comfort needs shutters, cooling a cooling room or heat pump,
+     * and the underfloor setting underfloor heating.
+     */
+    fun systemFor(domain: JSONObject?): List<Ctl> {
+        fun has(key: String) = (domain?.optJSONArray(key)?.length() ?: 0) > 0
+        val rooms = domain?.optJSONArray("Room")
+        val cooling = has("HeatPump") || has("Airzone") ||
+            (0 until (rooms?.length() ?: 0)).any { rooms?.optJSONObject(it)?.has("HvacMode") == true }
+        return SYSTEM.filter { c ->
+            when (c.label) {
+                "Summer comfort", "Too warm indoors above", "Too warm outdoors above" -> has("Shutter")
+                "Cooling default temperature", "Cooling limit in away mode", "Away mode for heat pumps" -> cooling
+                "Underfloor heating with no thermostat" -> has("UnderFloorHeating") || has("HeatingActuator")
+                else -> true
+            }
+        }
+    }
+
     /** Seasonal comfort (/data/v2/seasonalComfort/), on hubs that report it. */
     val SEASONAL: List<Ctl> = listOf(
         Ctl.Toggle("Seasonal comfort", "Enabled") { _, on -> bare("/seasonalComfort/Enabled", on) },
