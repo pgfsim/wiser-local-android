@@ -58,9 +58,15 @@ The app has four tabs, plus a settings page behind the gear icon:
   brightness, mode, away action and power-on behaviour; a shutter's position and
   tilt; a heating actuator's output, cycle time and floor sensor limits), its
   name, its room and, for lights, shutters, fans, plugs and chargers, its
-  schedule. Light, shutter and fan schedules ("Level" schedules, in percent)
+  schedule. Also: a light's dimming range, a shutter's motor timings and slat
+  angles, a PowerTag's installation type and grid limit, high- and low-power
+  alarms on appliances, what each button on a button panel does (any action a
+  Moment can do), and Zigbee groups of lights and shutters (create, add or
+  remove devices, rename, delete). Light, shutter and fan schedules ("Level" schedules, in percent)
   can be edited. System settings adds summer comfort, seasonal comfort, cooling
-  and underfloor settings and Matter pairing where the hub supports them, and
+  and underfloor settings, the dynamic energy tariff (price now, today's
+  average, cheapest and dearest times) and Matter pairing where the hub
+  supports them, and
   room pages add summer comfort, cooling, heat pump mode and floor sensor
   settings. All of this follows the official app's requests but has only been
   tested against a simulated hub.
@@ -274,6 +280,12 @@ and may change.
 
 ## Limitations
 
+- **Airzone air conditioning isn't supported.** The official app adds an
+  Airzone unit only after finding it on the local network with its own
+  discovery step, then registers it with the hub (`POST /domain/Airzone`).
+  Without that discovery, and without the hardware to test against, there is
+  no reliable way to set one up from this app, so use the official app for
+  Airzone.
 - The widget refreshes about every 30 minutes (Android's minimum for this kind
   of widget), when you tap its refresh icon, and whenever the app loads data.
 - The hub secret is stored in the app's private storage, unencrypted. Backups

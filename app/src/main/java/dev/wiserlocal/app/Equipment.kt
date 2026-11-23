@@ -37,8 +37,30 @@ sealed class Ctl(val label: String) {
         val send: (Int, Int) -> Req,
     ) : Ctl(label)
 
-    /** A command, shown when [field] (if given) is present. */
-    class Button(label: String, val field: String? = null, val confirm: String? = null, val send: (Int) -> Req) : Ctl(label)
+    /** A command, shown when [field] (if given) is present, or when it is missing if [whenMissing]. */
+    class Button(
+        label: String,
+        val field: String? = null,
+        val confirm: String? = null,
+        val whenMissing: Boolean = false,
+        val send: (Int) -> Req,
+    ) : Ctl(label)
+
+    /** Like [Number], but the request also carries the item's other current values. */
+    class NumberWith(
+        label: String,
+        val field: String,
+        val values: List<Int>,
+        val unit: String,
+        val scale: Int = 1,
+        val send: (Int, Int, JSONObject) -> Req,
+    ) : Ctl(label)
+
+    /** Like [Choice], but the request also carries the item's other current values. */
+    class ChoiceWith(label: String, val field: String, val options: List<Pair<String, String>>, val send: (Int, String, JSONObject) -> Req) : Ctl(label)
+
+    /** Like [Toggle], but the request also carries the item's other current values. */
+    class ToggleWith(label: String, val field: String, val send: (Int, Boolean, JSONObject) -> Req) : Ctl(label)
 }
 
 /** One kind of equipment: the domain list it lives in and its controls. */
@@ -98,6 +120,12 @@ object Equipment {
                     patch("Light/$id", obj("SetOutputMode" to v))
                 },
                 Ctl.Toggle("Dimming", "IsDimmable") { id, on -> patch("Light/$id/EnableDimming", on.toString()) },
+                Ctl.Number("Lowest dimming level", "OutputRange.Minimum", (0..50 step 5).toList(), "%") { id, v ->
+                    patch("Light/$id/SetOutputRange", obj("Minimum" to v))
+                },
+                Ctl.Number("Highest dimming level", "OutputRange.Maximum", (50..100 step 5).toList(), "%") { id, v ->
+                    patch("Light/$id/SetOutputRange", obj("Maximum" to v))
+                },
             ),
             rename = { id, name -> patch("Light/$id/", obj("Name" to name)) },
             roomable = true,
@@ -119,6 +147,22 @@ object Equipment {
                 Ctl.Choice("Mode", "Mode", MODE) { id, v -> patch("Shutter/$id", obj("Mode" to v)) },
                 Ctl.Choice("In away mode", "AwayAction", listOf("NoChange" to "No change", "Close" to "Close")) { id, v -> bare("Shutter/$id/AwayAction", v) },
                 Ctl.Toggle("Summer comfort", "RespectSummerComfort") { id, on -> bare("Shutter/$id/RespectSummerComfort", on) },
+                Ctl.NumberWith("Time to open fully", "DriveConfig.LiftOpenTime", (5..180 step 5).toList(), " s") { id, v, d ->
+                    driveConfig(id, d, "LiftOpenTime", v)
+                },
+                Ctl.NumberWith("Time to close fully", "DriveConfig.LiftCloseTime", (5..180 step 5).toList(), " s") { id, v, d ->
+                    driveConfig(id, d, "LiftCloseTime", v)
+                },
+                Ctl.ToggleWith("Tilting slats", "DriveConfig.TiltEnabled") { id, on, d -> driveConfig(id, d, "TiltEnabled", on) },
+                Ctl.NumberWith("Time to tilt fully", "DriveConfig.TiltTime", (1..30).toList(), " s") { id, v, d ->
+                    driveConfig(id, d, "TiltTime", v)
+                },
+                Ctl.NumberWith("Slat angle when closed", "DriveConfig.TiltAngleClosed", (0..90 step 5).toList(), "°") { id, v, d ->
+                    driveConfig(id, d, "TiltAngleClosed", v)
+                },
+                Ctl.NumberWith("Slat angle when open", "DriveConfig.TiltAngleOpen", (0..90 step 5).toList(), "°") { id, v, d ->
+                    driveConfig(id, d, "TiltAngleOpen", v)
+                },
             ),
             rename = { id, name -> patch("Shutter/$id/", obj("Name" to name)) },
             roomable = true,
@@ -183,6 +227,16 @@ object Equipment {
                 Ctl.Choice("Direction", "Direction", listOf("Forward" to "Forward", "Reverse" to "Reverse")) { id, v ->
                     patch("PTE/$id/", obj("Direction" to v))
                 },
+                Ctl.ChoiceWith("Installation", "InstallationType", listOf("Mono" to "Consumption only", "Bidirectional" to "Consumption and export")) { id, v, d ->
+                    powerTag(id, d, "InstallationType", v)
+                },
+                Ctl.NumberWith("Grid limit", "GridLimit", (1..100).toList(), "") { id, v, d -> powerTag(id, d, "GridLimit", v) },
+                Ctl.ChoiceWith("Grid limit in", "GridLimitUom", listOf("A" to "Amps (A)", "kVA" to "kVA", "W" to "Watts (W)")) { id, v, d ->
+                    powerTag(id, d, "GridLimitUom", v)
+                },
+                Ctl.Choice("Energy export", "EnergyExport", listOf("None" to "None", "Some" to "Some", "All" to "All")) { id, v ->
+                    patch("PTE/$id/", obj("EnergyExport" to v))
+                },
             ),
             fallbackName = "PowerTag",
         ),
@@ -201,6 +255,8 @@ object Equipment {
                 Ctl.Info("Power", "TotalActivePower") { "$it W" },
                 Ctl.Info("Rated power", "StatedPower") { "$it W" },
                 Ctl.Toggle("Power control (PCM)", "PcmMode") { id, on -> bare("Equipment/$id/PcmMode", on) },
+                *powerAlarm("OverPowerNotification", "High-power alarm", "above").toTypedArray(),
+                *powerAlarm("UnderPowerNotification", "Low-power alarm", "below").toTypedArray(),
             ),
             rename = { id, name -> patch("Equipment/$id/", obj("EquipmentName" to name)) },
             fallbackName = "Appliance",
@@ -316,6 +372,60 @@ object Equipment {
         DomainSpec("ButtonPanel", "Button panels", listOf(Ctl.Info("Buttons", "Events") { (it as? JSONArray)?.length()?.toString() ?: "" }), fallbackName = "Button panel"),
         DomainSpec("ZigbeeGroup", "Zigbee groups", listOf(Ctl.Info("Devices", "Members") { (it as? JSONArray)?.length()?.toString() ?: "" }), fallbackName = "Group"),
     )
+
+    /** The official SetDriveConfig sends the whole drive set-up; [key] is the one being changed. */
+    private fun driveConfig(id: Int, data: JSONObject, key: String, value: Any): Req {
+        val dc = data.optJSONObject("DriveConfig") ?: JSONObject()
+        val body = JSONObject()
+            .put("LiftOpenTime", dc.optInt("LiftOpenTime"))
+            .put("LiftCloseTime", dc.optInt("LiftCloseTime"))
+        if (data.optBoolean("IsTiltSupported", false)) {
+            body.put("TiltEnabled", dc.optBoolean("TiltEnabled"))
+                .put("TiltTime", dc.optInt("TiltTime"))
+                .put("TiltAngleClosed", dc.optInt("TiltAngleClosed"))
+                .put("TiltAngleOpen", dc.optInt("TiltAngleOpen"))
+        }
+        body.put(key, value)
+        return patch("Shutter/$id/SetDriveConfig", body.toString())
+    }
+
+    /** The official ConfigurePowerTag sends the limit, its unit and the direction together, with the installation type or export. */
+    private fun powerTag(id: Int, data: JSONObject, key: String, value: Any): Req {
+        val body = JSONObject()
+            .put("GridLimit", data.optInt("GridLimit"))
+            .put("GridLimitUom", data.optString("GridLimitUom").ifEmpty { "A" })
+            .put("Direction", data.optString("Direction").ifEmpty { "Forward" })
+        data.optString("InstallationType").takeIf { it.isNotEmpty() }?.let { body.put("InstallationType", it) }
+        body.put(key, value)
+        return patch("PTE/$id/", body.toString())
+    }
+
+    /**
+     * An appliance's high- or low-power alarm ([key] OverPowerNotification or UnderPowerNotification):
+     * PATCH Equipment/{id}/ {key: {PeriodMins, Limit, Enabled}}, DELETE Equipment/{id}/{key}/ to remove.
+     */
+    private fun powerAlarm(key: String, title: String, word: String): List<Ctl> {
+        fun send(id: Int, data: JSONObject, change: (JSONObject) -> Unit): Req {
+            val cur = data.optJSONObject(key) ?: JSONObject()
+            val alarm = JSONObject()
+                .put("PeriodMins", cur.optInt("PeriodMins", 5))
+                .put("Limit", cur.optInt("Limit", 1000))
+                .put("Enabled", cur.optBoolean("Enabled", true))
+            change(alarm)
+            return patch("Equipment/$id/", JSONObject().put(key, alarm).toString())
+        }
+        return listOf(
+            Ctl.Button("Add a ${title.lowercase()}", field = key, whenMissing = true) { id ->
+                patch("Equipment/$id/", JSONObject().put(key, JSONObject().put("PeriodMins", 5).put("Limit", 1000).put("Enabled", true)).toString())
+            },
+            Ctl.ToggleWith(title, "$key.Enabled") { id, on, d -> send(id, d) { it.put("Enabled", on) } },
+            Ctl.NumberWith("Alarm when $word", "$key.Limit", (100..10000 step 100).toList(), " W") { id, v, d -> send(id, d) { it.put("Limit", v) } },
+            Ctl.NumberWith("For at least", "$key.PeriodMins", listOf(1, 2, 5, 10, 15, 30, 60, 120), " min") { id, v, d -> send(id, d) { it.put("PeriodMins", v) } },
+            Ctl.Button("Remove the ${title.lowercase()}", field = key, confirm = "Remove the ${title.lowercase()}?") { id ->
+                Req("DELETE", "Equipment/$id/$key/", null)
+            },
+        )
+    }
 
     /** System-wide settings for summer comfort, cooling and underfloor heating; each shows only if the hub reports it. */
     val SYSTEM: List<Ctl> = listOf(

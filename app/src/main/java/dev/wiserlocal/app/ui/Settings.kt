@@ -841,6 +841,21 @@ fun SystemSettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                     ControlRows(vm, sc, 0, dev.wiserlocal.app.Equipment.SEASONAL)
                 }
             }
+            vm.tariff?.let { t ->
+                Section("Energy tariff") {
+                    fun price(p: Double) = String.format(java.util.Locale.getDefault(), "%.4f", p)
+                    val rows = listOfNotNull(
+                        t.now?.let { "Price now" to price(it) },
+                        t.average?.let { "Today's average" to price(it) },
+                        t.day.minByOrNull { it.price }?.let { "Cheapest today" to "${price(it.price)} · ${it.from}–${it.to}" },
+                        t.day.maxByOrNull { it.price }?.let { "Dearest today" to "${price(it.price)} · ${it.from}–${it.to}" },
+                    )
+                    rows.forEachIndexed { i, (label, value) ->
+                        if (i > 0) RowDivider()
+                        InfoRow(label, value)
+                    }
+                }
+            }
             if (state.features.flags["MatterBridge"] == true) Section("Matter") {
                 ControlRows(vm, JSONObject(), 0, dev.wiserlocal.app.Equipment.MATTER)
             }

@@ -51,6 +51,8 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
     /** What each automation does, by id; null where the hub's answer could not be read. */
     var automationDetails by mutableStateOf<Map<Int, AutomationDetail?>>(emptyMap()); private set
     var network by mutableStateOf<List<Pair<String, String>>>(emptyList()); private set
+    /** The dynamic energy tariff, read while System settings is open on hubs that have one. */
+    var tariff by mutableStateOf<dev.wiserlocal.app.Tariff?>(null); private set
     var openTherm by mutableStateOf(OpenThermInfo.NONE); private set
 
     var loading by mutableStateOf(false); private set
@@ -136,6 +138,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
         val automationDetails: Map<Int, AutomationDetail?>?,
         val network: List<Pair<String, String>>?,
         val openTherm: OpenThermInfo?,
+        val tariff: dev.wiserlocal.app.Tariff? = null,
     )
 
     fun refresh() = run()
@@ -177,11 +180,14 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                     state.automations.associate { a -> a.id to try { hub.fetchAutomation(a.id) } catch (e: Exception) { null } }
                 } else null
                 val net = if (system) try { hub.fetchNetwork() } catch (e: Exception) { emptyList() } else null
+                val tariffNow = if (system && state.features.flags["EnergyTariff"] == true) {
+                    try { hub.fetchTariff() } catch (e: Exception) { null }
+                } else null
                 // OpenTherm settings and readings only matter once OpenTherm is the boiler type.
                 val boiler = if (system && (state.system.openTherm == "Connected" || state.system.usesOpenTherm)) {
                     try { hub.fetchOpenTherm() } catch (e: Exception) { OpenThermInfo.NONE }
                 } else if (system) OpenThermInfo.NONE else null
-                Loaded(state, schedules, actions, automations, net, boiler)
+                Loaded(state, schedules, actions, automations, net, boiler, tariffNow)
             }
             result.getOrNull()?.let { dev.wiserlocal.app.AppShortcuts.publish(getApplication(), it.state) }
             main.post {
@@ -202,6 +208,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                         loaded.momentActions?.let { momentActions = it }
                         loaded.automationDetails?.let { automationDetails = it }
                         loaded.network?.let { network = it }
+                        if (loaded.network != null) tariff = loaded.tariff
                         loaded.openTherm?.let { openTherm = it }
                         error = null
                         updatedAt = System.currentTimeMillis()

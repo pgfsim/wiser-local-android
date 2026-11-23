@@ -237,6 +237,11 @@ data class HubState(
     val seasonalComfort: org.json.JSONObject? = null,
 )
 
+/** The dynamic energy tariff: the price now, the day's average and today's prices (in the hub's units). */
+data class Tariff(val now: Double?, val average: Double?, val day: List<TariffSlot>)
+
+data class TariffSlot(val from: String, val to: String, val price: Double)
+
 /** A light, smart plug or shutter: [extra] is "dims" for a dimmable light, "tilts" for a tilting shutter. */
 data class SimpleDevice(val id: Int, val name: String, val extra: Boolean = false)
 
@@ -730,6 +735,57 @@ class WiserHub(
         val text = attempt("GET", "/data/v2/network/", null) ?: return null
         return JSONObject(text).optJSONObject("Station")?.optStringOrNull("MacAddress")
     }
+
+    /**
+     * The dynamic energy tariff, as the official app reads it: today's prices
+     * (Tariffs/EnergyTariff/CurrentDay, [{from, to, price}]), the price now and the day's average.
+     * Null when the hub has no tariff.
+     */
+    fun fetchTariff(): Tariff? {
+        val base = "Tariffs/EnergyTariff/"
+        fun number(path: String) = runCatching { attempt("GET", "${BASE_PATHS[0]}$base$path", null)?.trim()?.trim('"')?.toDoubleOrNull() }.getOrNull()
+        val dayText = runCatching { attempt("GET", "${BASE_PATHS[0]}${base}CurrentDay", null) }.getOrNull()
+        val day = mutableListOf<TariffSlot>()
+        dayText?.let { text ->
+            runCatching {
+                val arr = JSONArray(text)
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    fun f(k: String) = o.opt(k) ?: o.opt(k.replaceFirstChar { it.uppercase() })
+                    day += TariffSlot(f("from")?.toString().orEmpty(), f("to")?.toString().orEmpty(), (f("price") as? Number)?.toDouble() ?: continue)
+                }
+            }
+        }
+        val now = number("CurrentPrice")
+        val average = number("DailyAverage")
+        if (now == null && average == null && day.isEmpty()) return null
+        return Tariff(now, average, day)
+    }
+
+    /** A button panel event's action, in the same format as a Moment's (null if this app can't show it). */
+    fun readAction(o: JSONObject): MomentAction? = runCatching { parseMomentAction(o) }.getOrNull()
+
+    /** Sets what a button on a panel does: PATCH ButtonPanel/{panel}/Events/{event}/Action with one Moment-style action. */
+    fun setButtonAction(panelId: Int, eventId: Int, action: MomentAction) =
+        patch("ButtonPanel/$panelId/Events/$eventId/Action", momentBody(listOf(action)))
+
+    /** Clears what a button on a panel does. */
+    fun clearButtonAction(panelId: Int, eventId: Int) {
+        request("DELETE", "ButtonPanel/$panelId/Events/$eventId/Action", null)
+    }
+
+    /** Creates a Zigbee group (lights or shutters that act together): POST ZigbeeGroup/ {Name, IconId, TargetDevices}. */
+    fun createZigbeeGroup(name: String, devicePaths: List<String>) {
+        // org.json writes "/" as "\/"; send plain slashes, as the official app does.
+        request("POST", "ZigbeeGroup/", JSONObject().put("Name", name).put("IconId", 0).put("TargetDevices", JSONArray(devicePaths)).toString().replace("\\/", "/"))
+    }
+
+    /** Changes a group's name and devices ("/Light/30" style paths). */
+    fun updateZigbeeGroup(id: Int, name: String, iconId: Int, devicePaths: List<String>) =
+        patch("ZigbeeGroup/$id", JSONObject().put("Name", name).put("IconId", iconId).put("TargetDevices", JSONArray(devicePaths)).toString().replace("\\/", "/"))
+
+    /** Deletes a group, as the official app does (PATCH …/Delete true). */
+    fun deleteZigbeeGroup(id: Int) = patch("ZigbeeGroup/$id/Delete", "true")
 
     fun fetchNetwork(): List<Pair<String, String>> {
         val text = attempt("GET", "/data/v2/network/", null) ?: return emptyList()

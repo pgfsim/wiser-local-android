@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import dev.wiserlocal.app.Ctl
 import dev.wiserlocal.app.Equipment
 import org.json.JSONObject
@@ -17,7 +18,21 @@ private fun Ctl.visibleFor(data: JSONObject): Boolean = when (this) {
     is Ctl.Toggle -> Equipment.field(data, field) != null
     is Ctl.Choice -> Equipment.field(data, field) != null
     is Ctl.Number -> Equipment.field(data, field) != null
-    is Ctl.Button -> field == null || Equipment.field(data, field) != null
+    is Ctl.Button -> when {
+        field == null -> true
+        whenMissing -> Equipment.field(data, field) == null
+        else -> Equipment.field(data, field) != null
+    }
+    is Ctl.NumberWith -> Equipment.field(data, field) != null
+    is Ctl.ChoiceWith -> Equipment.field(data, field) != null
+    is Ctl.ToggleWith -> Equipment.field(data, field) != null
+}
+
+private fun isOn(v: Any?): Boolean = when (v) {
+    is Boolean -> v
+    is String -> v.equals("true", true) || v.equals("On", true) || v.equals("Enabled", true)
+    is Number -> v.toInt() != 0
+    else -> false
 }
 
 /**
@@ -33,14 +48,26 @@ fun ControlRows(vm: HubViewModel, data: JSONObject, id: Int, controls: List<Ctl>
         first = false
         when (c) {
             is Ctl.Info -> InfoRow(c.label, Equipment.field(data, c.field)?.let(c.format))
-            is Ctl.Toggle -> {
-                val on = when (val v = Equipment.field(data, c.field)) {
-                    is Boolean -> v
-                    is String -> v.equals("true", true) || v.equals("On", true) || v.equals("Enabled", true)
-                    is Number -> v.toInt() != 0
-                    else -> false
+            is Ctl.Toggle -> SwitchRow(c.label, null, isOn(Equipment.field(data, c.field))) { now -> vm.run { it.send(c.send(id, now)) } }
+            is Ctl.ToggleWith -> SwitchRow(c.label, null, isOn(Equipment.field(data, c.field))) { now -> vm.run { it.send(c.send(id, now, data)) } }
+            is Ctl.ChoiceWith -> {
+                val current = Equipment.field(data, c.field)?.toString()
+                val index = c.options.indexOfFirst { it.first.equals(current, true) }
+                InfoRow(c.label, c.options.getOrNull(index)?.second ?: current?.let(Equipment::spaced), showChevron = true) {
+                    dialogs.choice(c.label, c.options.map { it.second }, index.takeIf { it >= 0 }) { pick ->
+                        vm.run { it.send(c.send(id, c.options[pick].first, data)) }
+                    }
                 }
-                SwitchRow(c.label, null, on) { now -> vm.run { it.send(c.send(id, now)) } }
+            }
+            is Ctl.NumberWith -> {
+                val raw = (Equipment.field(data, c.field) as? Number)?.toInt()
+                fun label(v: Int) = if (c.scale == 10) Equipment.formatTenths(v) else "$v${c.unit}"
+                InfoRow(c.label, raw?.let(::label), showChevron = true) {
+                    val nearest = raw?.let { r -> c.values.minByOrNull { kotlin.math.abs(it - r) } }
+                    dialogs.choice(c.label, c.values.map(::label), nearest?.let { c.values.indexOf(it) }) { pick ->
+                        vm.run { it.send(c.send(id, c.values[pick], data)) }
+                    }
+                }
             }
             is Ctl.Choice -> {
                 val current = Equipment.field(data, c.field)?.toString()
@@ -91,6 +118,14 @@ fun EquipmentScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                     }
                 }
             }
+            val groupable = Equipment.items(domain, Equipment.SPECS.first { it.domain == "Light" }) +
+                Equipment.items(domain, Equipment.SPECS.first { it.domain == "Shutter" })
+            if (groupable.isNotEmpty()) Section {
+                val dialogs = LocalDialogs.current
+                InfoRow("New Zigbee group", "Lights or shutters that switch together, for example from one button.", showChevron = true) {
+                    dialogs.prompt("Group name", "") { name -> vm.run("Group created") { it.createZigbeeGroup(name.trim(), emptyList()) } }
+                }
+            }
             if (!any) {
                 Text(
                     "This hub has no lights, shutters, plugs, sensors or other equipment besides its heating devices.",
@@ -117,6 +152,9 @@ fun EquipmentItemScreen(vm: HubViewModel, snackbar: SnackbarHostState, domainNam
             }
             val (_, name, data) = item
             Section { ControlRows(vm, data, id, spec.controls) }
+
+            if (spec.domain == "ButtonPanel") ButtonPanelEvents(vm, state, id, data)
+            if (spec.domain == "ZigbeeGroup") ZigbeeGroupMembers(vm, id, name, data)
 
             // Lights, shutters and fans follow a level schedule; plugs and EV chargers an on/off one.
             val levelKind = spec.domain in setOf("Light", "Shutter", "FanController")
@@ -167,6 +205,90 @@ fun EquipmentItemScreen(vm: HubViewModel, snackbar: SnackbarHostState, domainNam
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+
+/**
+ * What each button on a panel does, set with the same actions as a Moment
+ * (PATCH ButtonPanel/{id}/Events/{event}/Action), or cleared.
+ */
+@Composable
+private fun ButtonPanelEvents(vm: HubViewModel, state: dev.wiserlocal.app.HubState, panelId: Int, data: JSONObject) {
+    val dialogs = LocalDialogs.current
+    val events = data.optJSONArray("Events") ?: return
+    val reader = remember { dev.wiserlocal.app.WiserHub("localhost", "") } // only reads action JSON, never connects
+    Section("Buttons") {
+        for (i in 0 until events.length()) {
+            val ev = events.optJSONObject(i) ?: continue
+            val eventId = ev.optInt("Id", ev.optInt("id", i))
+            val label = ev.optString("Name").ifEmpty { "Button ${i + 1}" } + (ev.optString("Type").takeIf { it.isNotEmpty() }?.let { " · ${Equipment.spaced(it)}" } ?: "")
+            val action = ev.optJSONObject("Action")?.let(reader::readAction)
+            val summary = when {
+                ev.optJSONObject("Action") == null -> "Does nothing"
+                action == null -> "Set up in the official app"
+                else -> describeAction(action, state).let { (t, v) -> "$t: $v" }
+            }
+            if (i > 0) RowDivider()
+            InfoRow(label, summary, showChevron = true) {
+                dialogs.choice(label, listOf("Choose what it does", "Make it do nothing")) { pick ->
+                    if (pick == 0) pickMomentAction(dialogs, state, action) { chosen ->
+                        vm.run("Button set") { it.setButtonAction(panelId, eventId, chosen) }
+                    } else vm.run("Button cleared") { it.clearButtonAction(panelId, eventId) }
+                }
+            }
+        }
+    }
+}
+
+/** The lights and shutters in a Zigbee group: add, remove, rename or delete it. */
+@Composable
+private fun ZigbeeGroupMembers(vm: HubViewModel, groupId: Int, name: String, data: JSONObject) {
+    val dialogs = LocalDialogs.current
+    val nav = LocalNav.current
+    val state = vm.state ?: return
+    val domain = state.domain
+    val targets = data.optJSONArray("TargetDevices")
+    val members: List<String> = when {
+        targets != null -> List(targets.length()) { targets.optString(it) }
+        else -> data.optJSONArray("Members")?.let { m -> List(m.length()) { m.optJSONObject(it)?.optString("DevicePath").orEmpty() } }.orEmpty()
+    }.filter { it.isNotEmpty() }
+    // Every light and shutter, by the device path the hub uses in groups.
+    val all = listOf("Light", "Shutter").flatMap { d ->
+        Equipment.items(domain, Equipment.SPECS.first { it.domain == d }).map { (id, n, _) -> "/$d/$id" to n }
+    }
+    fun label(path: String) = all.firstOrNull { it.first == path }?.second ?: path
+    val iconId = data.optInt("IconId", 0)
+    Section("In this group") {
+        if (members.isEmpty()) InfoRow("No devices yet")
+        members.forEachIndexed { i, p ->
+            if (i > 0) RowDivider()
+            InfoRow(label(p), "Tap to take it out of the group", showChevron = true) {
+                vm.run { it.updateZigbeeGroup(groupId, name, iconId, members - p) }
+            }
+        }
+    }
+    Section {
+        val outside = all.filter { it.first !in members }
+        InfoRow("Add a light or shutter", null, showChevron = true) {
+            if (outside.isEmpty()) {
+                dialogs.message("Zigbee group", "Every light and shutter is already in this group.")
+                return@InfoRow
+            }
+            dialogs.choice("Add to $name", outside.map { it.second }) { pick ->
+                vm.run { it.updateZigbeeGroup(groupId, name, iconId, members + outside[pick].first) }
+            }
+        }
+        RowDivider()
+        InfoRow("Rename group", name, showChevron = true) {
+            dialogs.prompt("Group name", name) { n -> vm.run { it.updateZigbeeGroup(groupId, n.trim(), iconId, members) } }
+        }
+        RowDivider()
+        InfoRow("Delete group") {
+            dialogs.confirm("Delete the group “$name”? Its lights and shutters stay on the hub.", "Delete") {
+                vm.run("Group deleted", onSuccess = { nav.pop() }) { it.deleteZigbeeGroup(groupId) }
             }
         }
     }
