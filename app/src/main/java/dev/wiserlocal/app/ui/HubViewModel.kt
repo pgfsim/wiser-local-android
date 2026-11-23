@@ -80,7 +80,15 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
     var cloudError by mutableStateOf<String?>(null); private set
 
     // Heat report from Wiser's Insights site.
-    private val insights = WiserInsights(cloudStore.insightsBase) { cloudAccessToken() }
+    // Debug builds keep the last heat report page in app-private storage, so a changed
+    // page can be pulled with `adb shell run-as` and checked against the parser.
+    private val insights = WiserInsights(
+        cloudStore.insightsBase,
+        accessToken = { cloudAccessToken() },
+        debugDump = if (dev.wiserlocal.app.BuildConfig.DEBUG) {
+            { html -> java.io.File(app.filesDir, "last_heat_report.html").writeText(html) }
+        } else null,
+    )
     var reportRange by mutableStateOf(ReportRange.DAY); private set
     var reportDate by mutableStateOf(LocalDate.now()); private set
     var report by mutableStateOf<HeatReport?>(null); private set

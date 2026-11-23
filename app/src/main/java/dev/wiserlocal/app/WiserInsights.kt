@@ -71,6 +71,8 @@ data class InsightsOverview(
 class WiserInsights(
     private val base: String = DEFAULT_BASE,
     private val accessToken: () -> String,
+    /** Debug builds only: receives each heat report page, to check the parser against. */
+    private val debugDump: ((String) -> Unit)? = null,
 ) {
     private val cookies = linkedMapOf<String, String>()
     private var sessionReady = false
@@ -88,6 +90,7 @@ class WiserInsights(
             openSession()
             html = get("/Home/${range.page}$query") ?: throw IOException("Wiser's Insights session could not be restored")
         }
+        debugDump?.let { dump -> runCatching { dump(html) } }
         return HeatReportParser.parse(html, range, start)
     }
 
@@ -178,6 +181,9 @@ object HeatReportParser {
             val times = JSONArray("[$xs]").let { a -> LongArray(a.length()) { time(a.getString(it)) } }
             val values = JSONArray("[$ys]").let { a -> DoubleArray(a.length()) { a.optDouble(it, Double.NaN) } }
             if (times.isEmpty() || times.size != values.size) continue
+            // Dotted lines only bridge a gap in a room's readings (the hub didn't report for a
+            // while). They repeat the room's name, so leave them out; the chart shows the gap.
+            if (Regex("""dash:\s*"dot"""").containsMatchIn(line)) continue
             val name = if (nameRaw == "null") null else JSONArray("[$nameRaw]").getString(0)
             val kind = when {
                 // The outdoor band is drawn as a fill down to a hidden line at -100.
@@ -190,6 +196,7 @@ object HeatReportParser {
             series += ReportSeries(name ?: "Outdoor", kind, times, values)
         }
         if (series.isEmpty()) throw IOException("The heat report had no readings in it")
+        mergeRepeats(series)
 
         val nights = NIGHT.findAll(html).map { time(it.groupValues[1]) to time(it.groupValues[2]) }.toList()
         val xRange = X_RANGE.find(html)
@@ -200,6 +207,20 @@ object HeatReportParser {
         val minC = yRange?.groupValues?.get(1)?.toDoubleOrNull() ?: (all.minOrNull() ?: 0.0) - 1
         val maxC = yRange?.groupValues?.get(2)?.toDoubleOrNull() ?: (all.maxOrNull() ?: 25.0) + 1
         return HeatReport(range, start.toLocalDate(), startMs, endMs, minC, maxC, series, nights)
+    }
+
+    /**
+     * Joins series that share a name and kind into one, in time order, so a room is never
+     * listed twice if the page splits its line into pieces.
+     */
+    private fun mergeRepeats(series: MutableList<ReportSeries>) {
+        val merged = series.groupBy { it.name to it.kind }.values.map { group ->
+            if (group.size == 1) return@map group[0]
+            val points = group.flatMap { s -> s.times.indices.map { s.times[it] to s.values[it] } }.sortedBy { it.first }
+            ReportSeries(group[0].name, group[0].kind, LongArray(points.size) { points[it].first }, DoubleArray(points.size) { points[it].second })
+        }
+        series.clear()
+        series += merged
     }
 
     /** "2026-11-18 06:02:12" in local time, or an ISO time with an offset. */
