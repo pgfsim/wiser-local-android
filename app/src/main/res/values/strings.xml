@@ -13,6 +13,7 @@
     <string name="widget_description">Shows the current and target temperature of one room.</string>
     <string name="widget_setup">Open app to set up</string>
     <string name="widget_offline">Offline</string>
+    <string name="widget_via_cloud">Through Wiser’s cloud</string>
     <string name="widget_no_rooms">No rooms</string>
     <string name="widget_target">Target %1$s</string>
     <string name="widget_target_heating">Target %1$s · heating</string>

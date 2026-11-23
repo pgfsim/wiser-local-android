@@ -35,13 +35,15 @@ class TempWidgetProvider : AppWidgetProvider() {
             try {
                 val prefs = Prefs(app)
                 if (!prefs.configured) {
-                    push(app, app.getString(R.string.widget_setup))
+                    push(app, app.getString(R.string.widget_setup), viaCloud = false)
                 } else {
                     try {
-                        render(app, prefs.hub().fetch())
+                        val hub = prefs.hub()
+                        val state = hub.fetch()
+                        render(app, state, viaCloud = hub.usedCloud)
                     } catch (e: Exception) {
                         // Keep the last known reading on screen and flag it as stale.
-                        push(app, app.getString(R.string.widget_offline))
+                        push(app, app.getString(R.string.widget_offline), viaCloud = false)
                     }
                 }
             } finally {
@@ -59,8 +61,11 @@ class TempWidgetProvider : AppWidgetProvider() {
             )
         }
 
-        /** Draws fresh hub data on every placed widget and remembers it for later. */
-        fun render(context: Context, state: HubState) {
+        /**
+         * Draws fresh hub data on every placed widget and remembers it for later. [viaCloud]
+         * adds a small cloud mark when the data came through Wiser's cloud (away from home).
+         */
+        fun render(context: Context, state: HubState, viaCloud: Boolean = false) {
             val wanted = Prefs(context).widgetRoomId
             val room = state.rooms.firstOrNull { it.id == wanted }
                 ?: state.rooms.firstOrNull { it.tempC != null }
@@ -85,10 +90,10 @@ class TempWidgetProvider : AppWidgetProvider() {
                 )
                 .apply()
 
-            push(context, DateFormat.getTimeFormat(context).format(Date()))
+            push(context, DateFormat.getTimeFormat(context).format(Date()), viaCloud)
         }
 
-        private fun push(context: Context, status: String) {
+        private fun push(context: Context, status: String, viaCloud: Boolean) {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, TempWidgetProvider::class.java))
             if (ids.isEmpty()) return
@@ -99,6 +104,7 @@ class TempWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widget_room, cache.getString("name", context.getString(R.string.app_name)))
             views.setTextViewText(R.id.widget_detail, cache.getString("detail", ""))
             views.setTextViewText(R.id.widget_status, status)
+            views.setViewVisibility(R.id.widget_cloud, if (viaCloud) android.view.View.VISIBLE else android.view.View.GONE)
 
             views.setOnClickPendingIntent(
                 R.id.widget_root,

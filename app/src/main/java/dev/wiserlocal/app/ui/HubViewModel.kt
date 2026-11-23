@@ -213,7 +213,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                         error = null
                         updatedAt = System.currentTimeMillis()
                         viaCloud = hub.usedCloud
-                        TempWidgetProvider.render(getApplication(), loaded.state)
+                        TempWidgetProvider.render(getApplication(), loaded.state, viaCloud = hub.usedCloud)
                     },
                     onFailure = { error = errorText(it) },
                 )
