@@ -237,6 +237,8 @@ fun ListCard(
 
 /** ("Living Room", "17.0°"), ("Hot water", "On for 1 hour"), and so on. */
 fun describeAction(action: MomentAction, state: HubState): Pair<String, String> {
+    if (action.type == MomentAction.TYPE_WAIT) return "Wait" to durationText(action.durationMinutes ?: 0)
+    if (action.type == MomentAction.TYPE_NOTIFY) return "Notification" to "Send"
     val value = when {
         action.type == MomentAction.TYPE_BOOST -> "Boost for ${durationText(action.durationMinutes ?: 60)}"
         action.type == MomentAction.TYPE_NONE -> "Back to schedule"

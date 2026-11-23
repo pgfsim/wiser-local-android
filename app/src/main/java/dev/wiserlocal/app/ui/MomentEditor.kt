@@ -200,7 +200,16 @@ fun MomentEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, momentId: 
                     ActionCard(
                         action,
                         state,
-                        onClick = { pickMomentAction(dialogs, state, action) { actions[index] = it } },
+                        onClick = {
+                            when (action.type) {
+                                // Waits and notifications come from elsewhere; a wait's length can be changed.
+                                MomentAction.TYPE_WAIT -> dialogs.choice("Wait", DURATIONS.map(::durationText)) { pick ->
+                                    actions[index] = action.copy(durationMinutes = DURATIONS[pick])
+                                }
+                                MomentAction.TYPE_NOTIFY -> Unit
+                                else -> pickMomentAction(dialogs, state, action) { actions[index] = it }
+                            }
+                        },
                         onRemove = { actions.removeAt(index) },
                     )
                 }
@@ -213,6 +222,7 @@ fun MomentEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, momentId: 
 private fun ActionCard(action: MomentAction, state: HubState, onClick: () -> Unit, onRemove: () -> Unit) {
     val accents = LocalAccents.current
     val water = action.domain == "HotWater"
+    val other = action.type == MomentAction.TYPE_WAIT || action.type == MomentAction.TYPE_NOTIFY
     val (target, value) = describeAction(action, state)
     Card(
         shape = CardShape,
@@ -224,15 +234,15 @@ private fun ActionCard(action: MomentAction, state: HubState, onClick: () -> Uni
     ) {
         Row(Modifier.padding(start = 16.dp, top = 14.dp, bottom = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
-                if (water) waterIcon() else flameIcon(),
+                if (other) painterResource(R.drawable.ic_moment) else if (water) waterIcon() else flameIcon(),
                 contentDescription = null,
                 tint = if (water) accents.water else accents.heat,
                 modifier = Modifier.size(28.dp),
             )
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(if (water) "Hot water" else "Heating", style = MaterialTheme.typography.titleMedium)
-                if (!water) Text(target, style = MaterialTheme.typography.bodyMedium)
+                Text(if (other) target else if (water) "Hot water" else "Heating", style = MaterialTheme.typography.titleMedium)
+                if (!water && !other) Text(target, style = MaterialTheme.typography.bodyMedium)
             }
             Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium)
             IconButton(onClick = onRemove) { Icon(Icons.Default.Close, contentDescription = "Remove action") }

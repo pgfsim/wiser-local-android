@@ -160,8 +160,50 @@ fun HubConnectionScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
         )
     }
 
+    var gettingSecret by remember { mutableStateOf(false) }
+
+    fun scanHubQr() {
+        val options = com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(com.google.mlkit.vision.barcode.common.Barcode.FORMAT_QR_CODE)
+            .build()
+        com.google.mlkit.vision.codescanner.GmsBarcodeScanning.getClient(context, options).startScan()
+            .addOnSuccessListener { code ->
+                val wifi = code.rawValue?.let(dev.wiserlocal.app.HubSetupWifi::parse)
+                if (wifi == null) {
+                    dialogs.message("Hub QR code", "That isn't the hub's Wi-Fi code. Scan the code on the label on the hub.")
+                    return@addOnSuccessListener
+                }
+                dialogs.confirm(
+                    "Press the Setup button on the hub so its light flashes, then tap Continue. " +
+                        "The phone joins the hub's ${wifi.ssid} network for a moment to read its secret; Android will ask you to allow it.",
+                    "Continue",
+                ) {
+                    gettingSecret = true
+                    search = "Getting the secret from the hub…"
+                    dev.wiserlocal.app.HubSetupWifi.fetchSecret(context, wifi) { result ->
+                        gettingSecret = false
+                        result.onSuccess {
+                            secret = it
+                            search = "Got the secret. Press Setup on the hub again to finish, then find the hub and save."
+                            // Back on the home Wi-Fi in a moment; look for the hub's address if it isn't set.
+                            if (host.isBlank()) android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(::findHub, 4_000)
+                        }.onFailure { search = it.message ?: "Couldn't get the secret from the hub" }
+                    }
+                }
+            }
+            .addOnFailureListener { search = "The QR scanner isn't available: ${it.message ?: "unknown error"}" }
+    }
+
     DetailScaffold("Hub connection", snackbar, onBack = { nav.pop() }, loading = vm.loading) { padding ->
         SettingsColumn(padding) {
+            FilledTonalButton(onClick = ::scanHubQr, enabled = !gettingSecret, modifier = Modifier.fillMaxWidth()) {
+                Text("Scan the QR code on the hub")
+            }
+            Text(
+                "Reads the hub's secret for you, using the code on the label on the hub. Or enter the details below.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             OutlinedTextField(
                 value = host,
                 onValueChange = { host = it },
@@ -183,9 +225,9 @@ fun HubConnectionScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                 modifier = Modifier.fillMaxWidth(),
             )
             Text(
-                "To get the secret: press the Setup button on the hub so its light flashes, join the WiserHeat… " +
-                    "Wi-Fi network from this phone, open http://192.168.8.1/secret/ in a browser and copy the text " +
-                    "shown. Press Setup again to finish.",
+                "To get the secret by hand: press the Setup button on the hub so its light flashes, join the hub's " +
+                    "own Wi-Fi network (named on its label, e.g. Wiser_… or WiserHeat…) from this phone, open " +
+                    "http://192.168.8.1/secret/ in a browser and copy the text shown. Press Setup again to finish.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -722,6 +764,12 @@ fun SystemSettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                         showChevron = row.onClick != null,
                         onClick = row.onClick,
                     )
+                }
+            }
+            if (system.zigbee.isNotEmpty()) Section("Zigbee network") {
+                system.zigbee.forEachIndexed { i, (label, value) ->
+                    if (i > 0) RowDivider()
+                    InfoRow(label, value)
                 }
             }
             Section("Firmware and restart") {

@@ -14,8 +14,10 @@ The app has four tabs, plus a settings page behind the gear icon:
   second or two; the status line then says "live".
 - **Automations:** Moments (create, edit, rename, delete and run; each action sets a
   room's temperature, boosts it for a time or sends it back to its schedule, or turns
-  the hot water on, off, on for a time or back to its schedule), Schedules
-  (a weekly editor for each heating schedule and for hot water; add, rename,
+  the hot water on, off, on for a time or back to its schedule; waits and
+  notifications added in the official app are kept), Schedules
+  (a weekly editor for each heating schedule and for hot water, with copy and
+  paste as text, like "Monday: 06:00 19.0, 08:00 17.5, 22:00 Off"; add, rename,
   copy and delete heating schedules), and automations (create and edit them:
   away mode or hot water conditions, times including sunrise and sunset, and
   notifications, waits, Moments, room and hot water actions; on/off, delete).
@@ -29,7 +31,8 @@ The app has four tabs, plus a settings page behind the gear icon:
   30 days against the outdoor minimum and maximum, activity counts, and the heat report: room temperatures,
   set points and outdoor temperature by day, week or month, drawn in the app.
   Tap or drag on the chart for the values at a time, and tap a name to hide it.
-- **Settings:** hub connection (with automatic hub discovery), rooms (each
+- **Settings:** hub connection (scan the QR code on the hub to get its secret,
+  and automatic hub discovery), rooms (each
   with its device count; a room page to rename it, choose or edit its schedule,
   switch open window detection, set its heating type and occupancy settings, see
   its devices and delete it), devices (a page each with its name, battery,
@@ -39,7 +42,7 @@ The app has four tabs, plus a settings page behind the gear icon:
   smart modes (eco, comfort), system settings (hub firmware, automatic firmware updates, restarting the hub, cloud and
   Wi-Fi details, changing the heat source and boiler type, OpenTherm hot water and
   heating water temperatures, hot water channel, legacy PowerTag energy mode, brand, OpenTherm, valve
-  protection, hub clock, boiler readings and burner and pump statistics over OpenTherm), home screen
+  protection, hub clock, Zigbee network details, boiler readings and burner and pump statistics over OpenTherm), home screen
   favourites, and light or dark theme.
 - **Home screen widget:** current and target temperature for one room.
 - **Quick settings tiles:** hot water boost, and away mode.
@@ -57,13 +60,20 @@ is undocumented and could change with a firmware update.
 ## Setup
 
 1. Give the hub a fixed IP address (a DHCP reservation on your router).
-2. Get the hub's secret:
+2. Get the hub's secret. The easy way: in the app's **Hub connection** page,
+   press **Setup** on the hub so its light flashes, tap **Scan the QR code on
+   the hub** and scan the code on the hub's label. The phone joins the hub's
+   own Wi-Fi for a moment (Android asks you to allow it), reads the secret and
+   goes back to your Wi-Fi. Press **Setup** again afterwards. The scanner is
+   Google's code scanner, so it needs Google Play services but no camera
+   permission. By hand instead:
    - Press the **Setup** button on the hub so its light flashes.
-   - Join the `WiserHeatXXXXXX` Wi-Fi network from your phone.
+   - Join the hub's Wi-Fi network (named on its label, `Wiser_XXXXXX` or
+     `WiserHeatXXXXXX`) from your phone.
    - Open `http://192.168.8.1/secret/` in a browser and copy the text.
    - Press **Setup** again to return the hub to normal.
-3. Open the app, enter the hub's IP address and the secret, and tap
-   **Save and test connection**.
+3. Enter the hub's IP address (or tap **Find hub on this network**) and the
+   secret, and tap **Save and test connection**.
 4. Optional: add the **Room temperature** widget from your launcher's widget
    picker, and add the **Water boost** tile by editing your quick settings.
 

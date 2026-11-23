@@ -105,6 +105,8 @@ data class SystemInfo(
      * if the hub doesn't report it.
      */
     val legacyPowerTagMode: Boolean? = null,
+    /** The hub's Zigbee network: channel, network id, address and so on, as label/value pairs. */
+    val zigbee: List<Pair<String, String>> = emptyList(),
 )
 
 data class Device(
@@ -177,6 +179,10 @@ data class MomentAction(
         const val TYPE_MANUAL = "Manual"
         const val TYPE_BOOST = "Boost"
         const val TYPE_NONE = "None"
+        /** A pause before the next action, [durationMinutes] long (stored as HHMM). */
+        const val TYPE_WAIT = "Wait"
+        /** Sends a notification to the phone (official app only). */
+        const val TYPE_NOTIFY = "Notify"
     }
 }
 
@@ -211,6 +217,8 @@ data class Schedule(
     val onOffWrapped: Boolean = false,
     /** Value of the next scheduled change (same units as [Slot.value]), if known. */
     val nextValue: Int? = null,
+    /** What the schedule asks for right now (heating: tenths of a degree), if the hub says. */
+    val currentValue: Int? = null,
     /** Day name and minutes past midnight of the next scheduled change, if known. */
     val nextDay: String? = null,
     val nextMinutes: Int? = null,
@@ -228,6 +236,9 @@ enum class HotWaterMode { AUTO, ON, OFF }
  * tenths of a degree, so 20.5°C is sent as 205, and schedule times are HHMM
  * integers, so 06:30 is sent as 630.
  */
+/** The hub answered with a server error (5xx): it is reachable but couldn't handle the request. */
+class HubServerError(val code: Int) : IOException("Hub returned HTTP $code")
+
 class WiserHub(
     host: String,
     private val secret: String,
@@ -337,6 +348,15 @@ class WiserHub(
                 ?.takeUnless { it.contains("NotSupported") }
                 // The official app counts both "enabled" states (automatically once, or by the user) as on.
                 ?.let { it.startsWith("Enabled") },
+            zigbee = json.optJSONObject("Zigbee")?.let { z ->
+                listOfNotNull(
+                    z.takeIf { it.has("NetworkChannel") }?.let { "Channel" to it.optInt("NetworkChannel").toString() },
+                    z.takeIf { it.has("PanId") }?.let { "Network ID (PAN)" to "0x%04X".format(it.optInt("PanId")) },
+                    z.optStringOrNull("ZigbeeEui")?.let { "Hub's Zigbee address" to it },
+                    z.optStringOrNull("ZigbeeModuleVersion")?.let { "Zigbee radio version" to it },
+                    z.optStringOrNull("ZigbeeAntenna")?.let { "Antenna" to spacedWords(it) },
+                )
+            }.orEmpty(),
         )
 
         val devices = mutableListOf<Device>()
@@ -660,8 +680,17 @@ class WiserHub(
     }
 
     private fun parseMomentAction(json: JSONObject): MomentAction? {
+        // A wait or a notification is a line of its own, with every other field empty.
+        val noTarget = json.isNull("Domain") || json.optString("Domain").isEmpty()
+        if (noTarget && json.has("Wait") && !json.isNull("Wait")) {
+            val hhmm = json.optInt("Wait")
+            return MomentAction("", 0, 0, hhmm / 100 * 60 + hhmm % 100, MomentAction.TYPE_WAIT)
+        }
+        if (noTarget && json.optBoolean("EnableNotification", false)) {
+            return MomentAction("", 0, 0, null, MomentAction.TYPE_NOTIFY)
+        }
         if (json.optString("Action") != "RequestOverride") return null
-        // Extras the official app sends as null; anything set there is beyond this app.
+        // Extras the official app sends as null; anything set alongside an action is beyond this app.
         if (json.has("Wait") && !json.isNull("Wait")) return null
         if (json.has("EnableNotification") && !json.isNull("EnableNotification") && json.optBoolean("EnableNotification")) return null
         val value = json.optString("Value").takeIf { it.startsWith("{") }?.let { JSONObject(it) } ?: return null
@@ -720,6 +749,18 @@ class WiserHub(
      * each with its override as a JSON string inside "Value".
      */
     private fun momentBody(actions: List<MomentAction>): String = actions.joinToString("\r\n") { action ->
+        if (action.type == MomentAction.TYPE_WAIT || action.type == MomentAction.TYPE_NOTIFY) {
+            // The official app's shape for these: every field empty except the one that matters.
+            val minutes = action.durationMinutes ?: 0
+            return@joinToString JSONObject()
+                .put("Domain", JSONObject.NULL)
+                .put("Id", JSONObject.NULL)
+                .put("Action", JSONObject.NULL)
+                .put("Value", JSONObject.NULL)
+                .put("Wait", if (action.type == MomentAction.TYPE_WAIT) minutes / 60 * 100 + minutes % 60 else JSONObject.NULL)
+                .put("EnableNotification", if (action.type == MomentAction.TYPE_NOTIFY) true else JSONObject.NULL)
+                .toString()
+        }
         // The same three shapes the official app writes.
         val override = when (action.type) {
             MomentAction.TYPE_BOOST -> JSONObject().put("type", "Boost").put("durationMinutes", action.durationMinutes ?: 60)
@@ -923,6 +964,7 @@ class WiserHub(
                     days = days,
                     onOffWrapped = wrapped,
                     nextValue = nextValue,
+                    currentValue = if (heating && o.has("CurrentSetpoint")) o.optInt("CurrentSetpoint") else null,
                     nextDay = next?.optStringOrNull("Day"),
                     nextMinutes = if (next != null && next.has("Time")) fromHhmm(next.optInt("Time")) else null,
                 )
@@ -1023,6 +1065,12 @@ class WiserHub(
         if (relay != null && System.currentTimeMillis() < localDownUntil) return relayAttempt(relay, method, fullPath, body)
         return try {
             localAttempt(method, fullPath, body)
+        } catch (e: HubServerError) {
+            // The hub is there but its data service failed (the 502s seen on 2026-11-21). Reads
+            // are safe to repeat through the cloud; a change may already have been applied, so
+            // it is not sent twice.
+            if (relay == null || method != "GET") throw e
+            relayAttempt(relay, method, fullPath, body)
         } catch (e: IOException) {
             if (relay == null || !unreachable(e)) throw e
             localDownUntil = System.currentTimeMillis() + LOCAL_RETRY_MS
@@ -1072,6 +1120,7 @@ class WiserHub(
                     }
                     code == 404 -> return null
                     code == 401 || code == 403 -> throw IOException(SECRET_REJECTED)
+                    code in 500..599 -> throw HubServerError(code)
                     code !in 200..299 -> throw IOException("Hub returned HTTP $code")
                     else -> return conn.inputStream.bufferedReader().use { it.readText() }
                 }
@@ -1193,6 +1242,10 @@ class WiserHub(
             if (this == null) return
             for (i in 0 until length()) optJSONObject(i)?.let(block)
         }
+
+        /** "ExternalAntenna" -> "External antenna". */
+        private fun spacedWords(s: String): String =
+            s.replace(Regex("(?<=[a-z])(?=[A-Z])"), " ").lowercase().replaceFirstChar { it.uppercase() }
 
         private fun JSONObject.optStringOrNull(key: String): String? =
             if (has(key) && !isNull(key)) optString(key).takeIf { it.isNotEmpty() } else null

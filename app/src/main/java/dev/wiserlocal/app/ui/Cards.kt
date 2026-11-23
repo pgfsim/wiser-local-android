@@ -125,7 +125,14 @@ fun RoomCard(room: Room, vm: HubViewModel, full: Boolean, modifier: Modifier = M
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(room.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(context.roomStatus(room), style = MaterialTheme.typography.bodyMedium, color = muted)
+                    // A room with no thermostat or valve isn't heated by the hub, so its target reads
+                    // "Off"; say what its schedule asks for now instead (Home Assistant's scheduled set point).
+                    val noDevices = vm.state?.devices?.none { it.roomId == room.id } == true
+                    val scheduled = vm.schedules.firstOrNull { it.heating && it.id == room.scheduleId }?.currentValue
+                    val status = if (noDevices && scheduled != null) {
+                        "No heating devices · schedule ${WiserHub.formatSetPoint(scheduled / 10.0)} now"
+                    } else context.roomStatus(room)
+                    Text(status, style = MaterialTheme.typography.bodyMedium, color = muted)
                 }
                 Overflow(menu, content)
             }

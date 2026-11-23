@@ -38,6 +38,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -123,7 +126,40 @@ fun ScheduleEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, screen: 
         snackbar = snackbar,
         onBack = ::leave,
         loading = vm.loading,
-        actions = { TextButton(onClick = ::save, enabled = loaded && dirty && !vm.loading) { Text("Save") } },
+        actions = {
+            TextButton(onClick = ::save, enabled = loaded && dirty && !vm.loading) { Text("Save") }
+            var menu by remember { mutableStateOf(false) }
+            val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+            IconButton(onClick = { menu = true }, enabled = loaded) {
+                Icon(Icons.Default.MoreVert, contentDescription = "More")
+            }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(text = { Text("Copy as text") }, onClick = {
+                    menu = false
+                    val text = dev.wiserlocal.app.ScheduleText.format(days, screen.heating)
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText(screen.title, text))
+                    vm.message = "Schedule copied as text"
+                })
+                DropdownMenuItem(text = { Text("Paste from text") }, onClick = {
+                    menu = false
+                    val text = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+                    dev.wiserlocal.app.ScheduleText.parse(text, screen.heating, MAX_SLOTS_PER_DAY)
+                        .onSuccess { parsed ->
+                            val which = if (parsed.size == 7) "the whole week" else parsed.keys.joinToString(", ")
+                            dialogs.confirm("Replace $which with the copied schedule? Nothing is sent until you tap Save.", "Replace") {
+                                parsed.forEach { (name, newSlots) -> days[name] = newSlots }
+                                dirty = true
+                            }
+                        }
+                        .onFailure {
+                            dialogs.message(
+                                "Paste from text",
+                                (it.message ?: "That isn't a schedule.") + "\n\nCopy text like “Monday: 06:00 19.0, 08:00 17.5, 22:00 Off”, one line per day, then try again.",
+                            )
+                        }
+                })
+            }
+        },
         bottomBar = {
             Row(
                 Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp),
