@@ -455,6 +455,8 @@ class WiserHub(host: String, private val secret: String) {
     fun setTimeZoneOffset(offset: Int) = patch("System/", """{"TimeZoneOffset":$offset}""")
 
     /** Lets the hub install firmware updates by itself, as the official app does. */
+    // Same request as the official app (EnableHubUpgrade). On controller firmware 4.52.3 the
+    // hub answers 404 for this path even though System lists FotaEnabled; kept for other hubs.
     fun setAutoFirmwareUpdates(enabled: Boolean) = patch("System/FotaEnabled", enabled.toString())
 
     /** Restarts the hub; it stops answering for a few minutes. */
