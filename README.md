@@ -9,7 +9,12 @@ The app has four tabs, plus a settings page behind the gear icon:
 - **Home:** whether the boiler is being called for heat, away mode, boost all
   rooms and cancel overrides; your favourite rooms and hot water with their
   controls (choose and order them with Edit); and your Moments, one tap to run.
-- **Automations:** Moments (create, edit, rename, delete and run), Schedules
+  On hubs that support it, the app keeps a live connection to the hub while it is
+  open, so changes made elsewhere (the official app, a thermostat) show within a
+  second or two; the status line then says "live".
+- **Automations:** Moments (create, edit, rename, delete and run; each action sets a
+  room's temperature, boosts it for a time or sends it back to its schedule, or turns
+  the hot water on, off, on for a time or back to its schedule), Schedules
   (a weekly editor for each heating schedule and for hot water; add, rename,
   copy and delete heating schedules), and automations (create and edit them:
   away mode or hot water conditions, times including sunrise and sunset, and
@@ -26,13 +31,15 @@ The app has four tabs, plus a settings page behind the gear icon:
   Tap or drag on the chart for the values at a time, and tap a name to hide it.
 - **Settings:** hub connection (with automatic hub discovery), rooms (each
   with its device count; a room page to rename it, choose or edit its schedule,
-  switch open window detection, see its devices and delete it), devices
-  (a page each with battery, signal and readings, its room, button lock,
-  firmware, identify and delete; add a new device), away mode (away temperature, whether hot water turns off too),
+  switch open window detection, set its heating type and occupancy settings, see
+  its devices and delete it), devices (a page each with its name, battery,
+  signal and readings, its room, button lock, radiator valve battery type,
+  firmware, identify and delete; add a new device, with an install code if it
+  has one, or stop adding devices), away mode (away temperature, whether hot water turns off too),
   smart modes (eco, comfort), system settings (hub firmware, automatic firmware updates, restarting the hub, cloud and
   Wi-Fi details, changing the heat source and boiler type, OpenTherm hot water and
   heating water temperatures, hot water channel, legacy PowerTag energy mode, brand, OpenTherm, valve
-  protection, hub clock, boiler readings over OpenTherm), home screen
+  protection, hub clock, boiler readings and burner and pump statistics over OpenTherm), home screen
   favourites, and light or dark theme.
 - **Home screen widget:** current and target temperature for one room.
 - **Quick settings tiles:** hot water boost, and away mode.
