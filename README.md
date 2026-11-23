@@ -1,5 +1,7 @@
 # Wiser Local
 
+[![Latest release](https://img.shields.io/github/v/release/pgfsim/wiser-local-android)](https://github.com/pgfsim/wiser-local-android/releases/latest)
+
 A small, unofficial Android app for Drayton Wiser heating hubs. It talks straight
 to the hub over your home network using the hub's local REST API, with no cloud
 account involved*.
