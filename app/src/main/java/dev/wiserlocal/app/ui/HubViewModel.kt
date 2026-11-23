@@ -67,6 +67,14 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
     /** True when the last load went through Wiser's cloud rather than straight to the hub. */
     var viaCloud by mutableStateOf(false); private set
 
+    /** True while the hub's live event stream is open, so changes show without reloading. */
+    var live by mutableStateOf(false); private set
+
+    @Volatile private var liveWanted = false
+    private var liveThread: Thread? = null
+    @Volatile private var liveStream: dev.wiserlocal.app.HubEventStream? = null
+    private val liveReload = Runnable { if (inFlight == 0) refresh() }
+
     var theme by mutableStateOf(prefs.theme); private set
     var favourites by mutableStateOf(prefs.favourites); private set
 
@@ -379,6 +387,68 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Opens the hub's live event stream while the app is on screen, when the hub supports
+     * it (FeatureCapability.Sse) and is reachable directly. Each event means something
+     * changed on the hub, here or elsewhere, so the app reloads shortly after it.
+     * Reloading on resume and after each change still works without it.
+     */
+    fun startLive() {
+        if (liveWanted) return
+        liveWanted = true
+        // Only the newest thread keeps going, if the app is paused and resumed quickly.
+        val t = kotlin.concurrent.thread(start = false, name = "hub-events", isDaemon = true) {
+            var backoffMs = 5_000L
+            while (liveWanted && liveThread === Thread.currentThread()) {
+                val loaded = state
+                val supported = loaded?.features?.flags?.get("Sse") == true
+                if (!prefs.configured || !supported) {
+                    // Check again soon while the first load is still on its way.
+                    sleepQuietly(if (loaded == null) 1_000 else 10_000)
+                    continue
+                }
+                try {
+                    val stream = WiserHub(prefs.host, prefs.secret).openEventStream()
+                    liveStream = stream
+                    main.post { live = true }
+                    backoffMs = 5_000L
+                    stream.forEachEvent { name, data ->
+                        if (dev.wiserlocal.app.BuildConfig.DEBUG) {
+                            android.util.Log.d("WiserLive", "event $name, ${data.length} chars")
+                        }
+                        main.removeCallbacks(liveReload)
+                        main.postDelayed(liveReload, LIVE_RELOAD_DELAY_MS)
+                    }
+                } catch (e: Exception) {
+                    if (dev.wiserlocal.app.BuildConfig.DEBUG) android.util.Log.d("WiserLive", "stream ended: ${e.javaClass.simpleName}")
+                } finally {
+                    liveStream?.close()
+                    liveStream = null
+                    main.post { live = false }
+                }
+                if (liveWanted && liveThread === Thread.currentThread()) {
+                    sleepQuietly(backoffMs)
+                    backoffMs = (backoffMs * 2).coerceAtMost(60_000L)
+                }
+            }
+        }
+        liveThread = t
+        t.start()
+    }
+
+    fun stopLive() {
+        liveWanted = false
+        liveStream?.close()
+        liveThread?.interrupt()
+        liveThread = null
+        main.removeCallbacks(liveReload)
+        live = false
+    }
+
+    private fun sleepQuietly(ms: Long) {
+        try { Thread.sleep(ms) } catch (_: InterruptedException) { }
+    }
+
     fun cloudSignOut() {
         cloudBusy = true
         val cloud = WiserCloud(cloudStore.base)
@@ -418,3 +488,6 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun errorText(e: Throwable) = "Error: " + (e.message ?: e.javaClass.simpleName)
 }
+
+/** How long after a hub event to reload, so a burst of events causes one reload. */
+private const val LIVE_RELOAD_DELAY_MS = 1_500L

@@ -58,6 +58,8 @@ data class HubFeatures(
     val legacyPowerTagMode get() = atLeast(4, 34, 11)
     /** Assigning a schedule to rooms or devices. */
     val assignableSchedules get() = atLeast(2, 55, 0)
+    /** The hub keeps each room's heating type (radiators, underfloor, electric). */
+    val roomHeatingType get() = atLeast(2, 55, 0)
 
     /** Most actions, conditions and times one automation can have. */
     val automationMaxActions get() = automationLimits?.maxActions?.coerceAtLeast(1) ?: DEFAULT_AUTOMATION_PARTS

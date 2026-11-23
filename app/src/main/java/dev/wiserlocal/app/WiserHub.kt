@@ -43,7 +43,18 @@ data class Room(
     val windowOpen: Boolean,
     /** Whether open window detection is switched on, or null if unsupported. */
     val windowDetection: Boolean?,
+    /** HydronicRadiator, HydronicUFH, ElectricRadiator or ElectricUFH, if the hub reports it. */
+    val heatingType: String? = null,
+    /** Occupancy settings, only for rooms the hub marks OccupancyCapable. */
+    val occupancy: RoomOccupancy? = null,
 )
+
+/**
+ * How a room reacts to nobody being in it: it drops by [unoccupiedOffsetTenths] (tenths of a
+ * degree) once it has been empty for [delayMinutes], and counts as occupied after
+ * [minOccupiedMinutes] of presence.
+ */
+data class RoomOccupancy(val unoccupiedOffsetTenths: Int, val delayMinutes: Int, val minOccupiedMinutes: Int)
 
 data class HotWater(
     val id: Int,
@@ -118,6 +129,10 @@ data class Device(
     val setPointC: Double?,
     /** How far open a radiator valve is asking to be, 0 to 100. */
     val demandPercent: Int?,
+    /** A name given in the official app or here, if any. */
+    val name: String? = null,
+    /** Radiator valves: 0 alkaline, 1 rechargeable (NiCd/NiMH), if reported. */
+    val batteryType: Int? = null,
 )
 
 /** A scene set up in the official app, which the hub can run on request. */
@@ -145,11 +160,25 @@ data class OpenThermInfo(
 data class Moment(val id: Int, val name: String, val iconId: Int = 0)
 
 /**
- * One thing a Moment does: put a room or the hot water on a manual setting.
- * [domain] is "Room" or "HotWater"; [setPoint] is in tenths of a degree
- * ([WiserHub.SCHEDULE_OFF] for off, 1100 for hot water on).
+ * One thing a Moment does to a room or the hot water. [domain] is "Room" or "HotWater".
+ * [type] is the override the official app sends: "Manual" holds [setPoint] (tenths of a
+ * degree; [WiserHub.SCHEDULE_OFF] for off, 1100 for hot water on), for [durationMinutes]
+ * if set; "Boost" boosts a room for [durationMinutes]; "None" cancels a boost or
+ * override, so it goes back to its schedule.
  */
-data class MomentAction(val domain: String, val id: Int, val setPoint: Int, val durationMinutes: Int? = null)
+data class MomentAction(
+    val domain: String,
+    val id: Int,
+    val setPoint: Int,
+    val durationMinutes: Int? = null,
+    val type: String = TYPE_MANUAL,
+) {
+    companion object {
+        const val TYPE_MANUAL = "Manual"
+        const val TYPE_BOOST = "Boost"
+        const val TYPE_NONE = "None"
+    }
+}
 
 /** An automation as listed in the hub's domain data: name, icon and whether it is on. */
 data class Automation(val id: Int, val name: String, val iconId: Int, val enabled: Boolean, val notify: Boolean)
@@ -256,6 +285,12 @@ class WiserHub(
                     ?.optInt("MeasuredHumidity")?.takeIf { it in 1..100 },
                 windowOpen = o.optString("WindowState") == "Open",
                 windowDetection = o.optBooleanOrNull("WindowDetectionActive"),
+                heatingType = o.optStringOrNull("HeatingType"),
+                occupancy = if (o.optBoolean("OccupancyCapable", false)) RoomOccupancy(
+                    o.optInt("UnoccupiedOffset", 0),
+                    o.optInt("OccupiedToUnoccupiedDelay", 1),
+                    o.optInt("MinimumOccupiedTime", 1),
+                ) else null,
             )
         }
 
@@ -323,6 +358,11 @@ class WiserHub(
                 tempC = readings[id]?.let { fromHub(it.optInt("MeasuredTemperature", NO_READING)) },
                 setPointC = readings[id]?.let { fromHub(it.optInt("SetPoint", NO_READING)) },
                 demandPercent = readings[id]?.takeIf { it.has("PercentageDemand") }?.optInt("PercentageDemand"),
+                name = o.optStringOrNull("Name")?.takeIf { it.isNotBlank() },
+                batteryType = o.takeIf { it.has("BatteryType") }?.let { b ->
+                    // The hub may report the number or the enum name.
+                    b.optString("BatteryType").let { t -> t.toIntOrNull() ?: if (t.startsWith("NiCd", true)) 1 else 0 }
+                },
             )
         }
 
@@ -393,6 +433,20 @@ class WiserHub(
     fun deleteRoom(roomId: Int) {
         request("DELETE", "Room/$roomId", null)
     }
+
+    /** The room's heating type, as the official app sets it on firmware 2.55.0 and later. */
+    fun setRoomHeatingType(roomId: Int, type: String) =
+        patch("Room/$roomId", JSONObject().put("HeatingType", type).toString())
+
+    /** All three occupancy settings at once, as the official app sends them. */
+    fun setRoomOccupancy(roomId: Int, occupancy: RoomOccupancy) = patch(
+        "Room/$roomId",
+        JSONObject()
+            .put("UnoccupiedOffset", occupancy.unoccupiedOffsetTenths)
+            .put("OccupiedToUnoccupiedDelay", occupancy.delayMinutes)
+            .put("MinimumOccupiedTime", occupancy.minOccupiedMinutes)
+            .toString(),
+    )
 
     fun setWindowDetection(roomId: Int, enabled: Boolean) =
         patch("Room/$roomId", """{"WindowDetectionActive":$enabled}""")
@@ -490,6 +544,25 @@ class WiserHub(
 
     /** Lets new devices join the hub for [seconds]. */
     fun permitJoin(seconds: Int) = patch("System/RequestPermitJoin", seconds.toString())
+
+    /** Stops the hub accepting new devices, as the official app does ("0"). */
+    fun stopPairing() = patch("System/RequestPermitJoin", "0")
+
+    /**
+     * Lets one device with an install code join (devices that ask for one, like some
+     * PowerTags): the official app sends the device's MAC as IeeeAddress with its code.
+     */
+    fun pairWithInstallCode(ieeeAddress: String, installCode: String, seconds: Int = 120) = patch(
+        "System/RequestZigbeeJoin",
+        JSONObject().put("Timeout", seconds).put("IeeeAddress", ieeeAddress).put("InstallCode", installCode).toString(),
+    )
+
+    fun renameDevice(deviceId: Int, name: String) =
+        patch("Device/$deviceId/", JSONObject().put("Name", name).toString())
+
+    /** Radiator valves only: 0 alkaline, 1 rechargeable. */
+    fun setBatteryType(deviceId: Int, type: Int) =
+        patch("Device/$deviceId/", JSONObject().put("BatteryType", type).toString())
 
     fun setDeviceLock(deviceId: Int, locked: Boolean) =
         patch("Device/$deviceId", """{"DeviceLockEnabled":$locked}""")
@@ -592,13 +665,21 @@ class WiserHub(
         if (json.has("Wait") && !json.isNull("Wait")) return null
         if (json.has("EnableNotification") && !json.isNull("EnableNotification") && json.optBoolean("EnableNotification")) return null
         val value = json.optString("Value").takeIf { it.startsWith("{") }?.let { JSONObject(it) } ?: return null
-        if (!value.optString("type").equals("Manual", ignoreCase = true) || !value.has("setPoint")) return null
-        return MomentAction(
-            domain = json.optString("Domain"),
-            id = json.optInt("Id"),
-            setPoint = value.optInt("setPoint"),
-            durationMinutes = value.takeIf { it.has("durationMinutes") }?.optInt("durationMinutes"),
-        )
+        val domain = json.optString("Domain")
+        if (domain != "Room" && domain != "HotWater") return null
+        val minutes = value.takeIf { it.has("durationMinutes") }?.optInt("durationMinutes")
+        val type = value.optString("type")
+        return when {
+            type.equals(MomentAction.TYPE_MANUAL, ignoreCase = true) && value.has("setPoint") ->
+                MomentAction(domain, json.optInt("Id"), value.optInt("setPoint"), minutes)
+            // A room boost: the hub raises the room for the given time, with no set point.
+            type.equals(MomentAction.TYPE_BOOST, ignoreCase = true) && domain == "Room" && minutes != null && minutes > 0 ->
+                MomentAction(domain, json.optInt("Id"), 0, minutes, MomentAction.TYPE_BOOST)
+            // Cancels a boost or override: back to the schedule.
+            type.equals(MomentAction.TYPE_NONE, ignoreCase = true) ->
+                MomentAction(domain, json.optInt("Id"), 0, null, MomentAction.TYPE_NONE)
+            else -> null
+        }
     }
 
     /**
@@ -639,9 +720,15 @@ class WiserHub(
      * each with its override as a JSON string inside "Value".
      */
     private fun momentBody(actions: List<MomentAction>): String = actions.joinToString("\r\n") { action ->
-        val override = JSONObject().put("type", "Manual").put("setPoint", action.setPoint)
-        // A timed hot water boost; the official app adds the duration to the same override.
-        action.durationMinutes?.let { override.put("durationMinutes", it) }
+        // The same three shapes the official app writes.
+        val override = when (action.type) {
+            MomentAction.TYPE_BOOST -> JSONObject().put("type", "Boost").put("durationMinutes", action.durationMinutes ?: 60)
+            MomentAction.TYPE_NONE -> JSONObject().put("type", "None")
+            else -> JSONObject().put("type", "Manual").put("setPoint", action.setPoint).also { o ->
+                // A timed hot water boost; the official app adds the duration to the same override.
+                action.durationMinutes?.let { o.put("durationMinutes", it) }
+            }
+        }
         JSONObject()
             .put("Domain", action.domain)
             .put("Id", action.id)
@@ -761,10 +848,23 @@ class WiserHub(
         if (live.has("RelativeModulationLevel")) {
             out += "Modulation" to "${live.optInt("RelativeModulationLevel")}%"
         }
-        if (counters.has("burnerHours")) out += "Burner hours" to counters.optInt("burnerHours").toString()
-        if (counters.has("successfulBurnerStarts")) {
-            out += "Burner starts" to counters.optInt("successfulBurnerStarts").toString()
+        // Burner and pump statistics from the boiler (the official app's extended diagnostics).
+        fun count(label: String, vararg keys: String) {
+            val key = keys.firstOrNull { counters.has(it) } ?: return
+            out += label to counters.optLong(key).toString()
         }
+        count("Burner hours", "burnerHours", "BurnerHours")
+        count("Burner starts", "successfulBurnerStarts", "SuccessfulBurnerStarts")
+        count("Failed burner starts", "unsuccessfulBurnerStarts", "UnsuccessfulBurnerStarts")
+        count("Flame signal too low", "numberFlameSignalTooLow", "NumberFlameSignalTooLow")
+        count("Burner hours on hot water", "burnerOnInDhwModeHours", "BurnerOnInDhwModeHours")
+        count("Burner starts on hot water", "burnerStartsDuringDhwMode", "BurnerStartsDuringDhwMode")
+        count("Heating pump hours", "chPumpHours", "ChPumpHours")
+        count("Heating pump starts", "chPumpStarts", "ChPumpStarts")
+        count("Hot water pump or valve hours", "dhwPumpOrValveHours", "DhwPumpOrValveHours")
+        count("Hot water pump or valve starts", "dhwPumpOrValveStarts", "DhwPumpOrValveStarts")
+        count("Boiler power cycles", "boilerPowerCycles", "BoilerPowerCycles")
+        count("Service code", "oemSpecificServiceCode", "OemSpecificServiceCode")
         return out
     }
 
@@ -980,6 +1080,25 @@ class WiserHub(
             }
         }
         throw IOException("Hub kept redirecting")
+    }
+
+    /**
+     * The hub's live event stream (server-sent events), as the official app uses on the home
+     * network: GET https://<hub>/api/wiser-home/db?sse&primary with the secret. Hubs that
+     * support it say so with FeatureCapability.Sse. Close the stream to stop reading.
+     */
+    fun openEventStream(): HubEventStream {
+        // HTTPS, as the official app uses; plain HTTP only for a hub that never asked for HTTPS (test hubs).
+        val scheme = if (host in httpsHosts || !host.contains(':')) "https" else "http"
+        val conn = open(URL("$scheme://$host/api/wiser-home/db?sse&primary"))
+        conn.connectTimeout = 5_000
+        conn.readTimeout = 0 // events can be minutes apart; close() ends the read
+        conn.setRequestProperty("Accept", "text/event-stream")
+        conn.setRequestProperty("Secret", secret)
+        val code = conn.responseCode
+        if (code == 401 || code == 403) { conn.disconnect(); throw IOException(SECRET_REJECTED) }
+        if (code !in 200..299) { conn.disconnect(); throw IOException("Hub returned HTTP $code for its event stream") }
+        return HubEventStream(conn)
     }
 
     private fun open(url: URL): HttpURLConnection {

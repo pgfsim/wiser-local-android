@@ -135,7 +135,13 @@ private fun LazyListScope.problems(vm: HubViewModel, nav: Navigator) {
 }
 
 fun updatedText(context: android.content.Context, vm: HubViewModel): String? =
-    vm.updatedAt?.let { "Updated ${context.timeText(it)}" + if (vm.viaCloud) " through Wiser's cloud" else "" }
+    vm.updatedAt?.let {
+        "Updated ${context.timeText(it)}" + when {
+            vm.viaCloud -> " through Wiser's cloud"
+            vm.live -> " · live"
+            else -> ""
+        }
+    }
 
 /** Favourite keys in order, defaulting to every room then hot water. */
 fun favouriteKeys(vm: HubViewModel, state: HubState): List<String> =

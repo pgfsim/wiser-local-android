@@ -187,7 +187,7 @@ fun MomentEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, momentId: 
                 !loaded -> Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 unknown -> NoteCard(
                     "This Moment was set up in the official app and does something this app can't show " +
-                        "or change yet, such as a room boost. You can still rename it, change its icon, run it or delete it here.",
+                        "or change yet, such as controlling a light or waiting before an action. You can still rename it, change its icon, run it or delete it here.",
                 )
                 actions.isEmpty() -> Text(
                     "No actions yet. Tap Add action to choose what this Moment does.",
@@ -257,19 +257,30 @@ fun pickMomentAction(dialogs: DialogHost, state: HubState, current: MomentAction
     dialogs.choice("What should it change?", targets) { index ->
         val room = state.rooms.getOrNull(index)
         if (room != null) {
-            val initial = current?.takeIf { it.domain == "Room" && it.id == room.id }?.setPoint ?: 200
-            dialogs.temperature(room.name, initial, allowOff = true) { tenths ->
-                onPicked(MomentAction("Room", room.id, tenths))
+            // The same choices as the official app: a temperature, a boost, or cancel a boost.
+            val options = listOf("Set a temperature") + DURATIONS.map { "Boost for ${durationText(it)}" } + "Back to schedule"
+            dialogs.choice(room.name, options) { pick ->
+                when {
+                    pick == 0 -> {
+                        val initial = current?.takeIf { it.domain == "Room" && it.id == room.id && it.type == MomentAction.TYPE_MANUAL }?.setPoint ?: 200
+                        dialogs.temperature(room.name, initial, allowOff = true) { tenths ->
+                            onPicked(MomentAction("Room", room.id, tenths))
+                        }
+                    }
+                    pick <= DURATIONS.size -> onPicked(MomentAction("Room", room.id, 0, DURATIONS[pick - 1], MomentAction.TYPE_BOOST))
+                    else -> onPicked(MomentAction("Room", room.id, 0, null, MomentAction.TYPE_NONE))
+                }
             }
         } else {
             val water = state.hotWater ?: return@choice
-            val options = listOf("On", "Off") + DURATIONS.map { "Boost for ${durationText(it)}" }
+            val options = listOf("On", "Off") + DURATIONS.map { "Boost for ${durationText(it)}" } + "Back to schedule"
             dialogs.choice("Hot water", options) { pick ->
                 onPicked(
-                    when (pick) {
-                        0 -> MomentAction("HotWater", water.id, WiserHub.HOT_WATER_ON)
-                        1 -> MomentAction("HotWater", water.id, WiserHub.SCHEDULE_OFF)
-                        else -> MomentAction("HotWater", water.id, WiserHub.HOT_WATER_ON, DURATIONS[pick - 2])
+                    when {
+                        pick == 0 -> MomentAction("HotWater", water.id, WiserHub.HOT_WATER_ON)
+                        pick == 1 -> MomentAction("HotWater", water.id, WiserHub.SCHEDULE_OFF)
+                        pick < 2 + DURATIONS.size -> MomentAction("HotWater", water.id, WiserHub.HOT_WATER_ON, DURATIONS[pick - 2])
+                        else -> MomentAction("HotWater", water.id, 0, null, MomentAction.TYPE_NONE)
                     },
                 )
             }

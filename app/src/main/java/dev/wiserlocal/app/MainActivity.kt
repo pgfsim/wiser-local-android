@@ -39,5 +39,11 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         vm.refresh()
+        vm.startLive()
+    }
+
+    override fun onPause() {
+        vm.stopLive()
+        super.onPause()
     }
 }

@@ -238,6 +238,8 @@ fun ListCard(
 /** ("Living Room", "17.0°"), ("Hot water", "On for 1 hour"), and so on. */
 fun describeAction(action: MomentAction, state: HubState): Pair<String, String> {
     val value = when {
+        action.type == MomentAction.TYPE_BOOST -> "Boost for ${durationText(action.durationMinutes ?: 60)}"
+        action.type == MomentAction.TYPE_NONE -> "Back to schedule"
         action.setPoint == WiserHub.SCHEDULE_OFF -> "Off"
         action.domain == "HotWater" && action.durationMinutes != null -> "On for ${durationText(action.durationMinutes)}"
         action.domain == "HotWater" -> "On"

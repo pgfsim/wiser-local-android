@@ -374,6 +374,39 @@ fun RoomDetailsScreen(vm: HubViewModel, snackbar: SnackbarHostState, roomId: Int
                         enabled,
                     ) { on -> vm.run { it.setWindowDetection(room.id, on) } }
                 }
+                if (state.features.roomHeatingType) room.heatingType?.let { current ->
+                    RowDivider()
+                    InfoRow("Heating type", heatingTypeLabel(current), showChevron = true) {
+                        val types = ROOM_HEATING_TYPES.keys.toList()
+                        dialogs.choice("Heating type", types.map { ROOM_HEATING_TYPES.getValue(it) }, types.indexOf(current)) { pick ->
+                            if (types[pick] != current) vm.run { it.setRoomHeatingType(room.id, types[pick]) }
+                        }
+                    }
+                }
+            }
+
+            room.occupancy?.let { occ ->
+                Section("Occupancy") {
+                    val offsets = (0..10).toList()
+                    val minutes = (1..60).toList()
+                    InfoRow("Lower by when empty", offsetLabel(occ.unoccupiedOffsetTenths / 10), showChevron = true) {
+                        dialogs.choice("Lower by when empty", offsets.map(::offsetLabel), offsets.indexOf(occ.unoccupiedOffsetTenths / 10)) { pick ->
+                            vm.run { it.setRoomOccupancy(room.id, occ.copy(unoccupiedOffsetTenths = offsets[pick] * 10)) }
+                        }
+                    }
+                    RowDivider()
+                    InfoRow("Empty after", minutesLabel(occ.delayMinutes), showChevron = true) {
+                        dialogs.choice("Counts as empty after", minutes.map(::minutesLabel), minutes.indexOf(occ.delayMinutes)) { pick ->
+                            vm.run { it.setRoomOccupancy(room.id, occ.copy(delayMinutes = minutes[pick])) }
+                        }
+                    }
+                    RowDivider()
+                    InfoRow("Occupied after", minutesLabel(occ.minOccupiedMinutes), showChevron = true) {
+                        dialogs.choice("Counts as occupied after", minutes.map(::minutesLabel), minutes.indexOf(occ.minOccupiedMinutes)) { pick ->
+                            vm.run { it.setRoomOccupancy(room.id, occ.copy(minOccupiedMinutes = minutes[pick])) }
+                        }
+                    }
+                }
             }
 
             val devices = state.devices.filter { it.roomId == room.id }
@@ -400,6 +433,20 @@ fun RoomDetailsScreen(vm: HubViewModel, snackbar: SnackbarHostState, roomId: Int
     }
 }
 
+/** The hub's room heating types, as the official app names them. */
+private val ROOM_HEATING_TYPES = linkedMapOf(
+    "HydronicRadiator" to "Radiators",
+    "HydronicUFH" to "Underfloor (water)",
+    "ElectricRadiator" to "Electric radiators",
+    "ElectricUFH" to "Electric underfloor",
+)
+
+private fun heatingTypeLabel(type: String) = ROOM_HEATING_TYPES[type] ?: spaced(type)
+
+private fun offsetLabel(degrees: Int) = if (degrees == 0) "Don't lower" else "$degrees°"
+
+private fun minutesLabel(n: Int) = if (n == 1) "1 minute" else "$n minutes"
+
 fun deviceName(device: Device, withRoom: Boolean = true): String {
     val type = when (device.type) {
         "RoomStat" -> "Room thermostat"
@@ -407,7 +454,9 @@ fun deviceName(device: Device, withRoom: Boolean = true): String {
         "Controller" -> "Hub"
         else -> spaced(device.type)
     }
-    return if (withRoom && device.roomName != null) "$type · ${device.roomName}" else type
+    // A name given in the official app (or here) replaces the type.
+    val label = device.name ?: type
+    return if (withRoom && device.roomName != null) "$label · ${device.roomName}" else label
 }
 
 /** Battery, signal, readings and firmware, one line each. */
@@ -449,6 +498,24 @@ fun DevicesScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                         "Start",
                     ) { vm.run("The hub is accepting new devices for two minutes") { it.permitJoin(120) } }
                 }
+                RowDivider()
+                InfoRow("Add a device with an install code", "For devices that came with a code to enter.", showChevron = true) {
+                    dialogs.prompt("Device address (MAC or EUI-64)", "") { address ->
+                        val ieee = address.filter { it.isLetterOrDigit() }.uppercase()
+                        if (ieee.length != 16 || ieee.any { it !in "0123456789ABCDEF" }) {
+                            dialogs.message("Install code", "The address should be 16 hexadecimal characters, as printed on the device.")
+                            return@prompt
+                        }
+                        dialogs.prompt("Install code", "") { code ->
+                            val clean = code.filter { it.isLetterOrDigit() }.uppercase()
+                            vm.run("The hub is waiting for that device for two minutes") { it.pairWithInstallCode(ieee, clean) }
+                        }
+                    }
+                }
+                RowDivider()
+                InfoRow("Stop adding devices", "Closes the hub to new devices straight away.") {
+                    vm.run("The hub is no longer accepting new devices") { it.stopPairing() }
+                }
             }
         }
     }
@@ -476,6 +543,12 @@ fun DeviceDetailsScreen(vm: HubViewModel, snackbar: SnackbarHostState, deviceId:
             val lock = device.locked?.takeIf { state.features.deviceLock }
             if (!isHub || lock != null) Section("Options") {
                 if (!isHub) {
+                    InfoRow("Name", device.name ?: "Not named", showChevron = true) {
+                        dialogs.prompt("Name", device.name ?: "") { newName ->
+                            vm.run { it.renameDevice(device.id, newName.trim()) }
+                        }
+                    }
+                    RowDivider()
                     InfoRow("Location", device.roomName ?: "No room", showChevron = true) {
                         val rooms = state.rooms
                         val options = rooms.map { it.name } + "No room"
@@ -500,6 +573,15 @@ fun DeviceDetailsScreen(vm: HubViewModel, snackbar: SnackbarHostState, deviceId:
                     if (!isHub) RowDivider()
                     SwitchRow("Device lock", "Locks the buttons on the device.", locked) { on ->
                         vm.run { it.setDeviceLock(device.id, on) }
+                    }
+                }
+                if (device.type == "iTRV") device.batteryType?.let { type ->
+                    RowDivider()
+                    val types = listOf("Alkaline", "Rechargeable (NiMH)")
+                    InfoRow("Battery type", types.getOrElse(type) { "Unknown" }, showChevron = true) {
+                        dialogs.choice("Battery type", types, type) { pick ->
+                            if (pick != type) vm.run { it.setBatteryType(device.id, pick) }
+                        }
                     }
                 }
             }
