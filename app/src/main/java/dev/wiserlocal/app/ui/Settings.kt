@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
@@ -345,7 +346,12 @@ private fun discoverHub(
 fun RoomsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
     val nav = LocalNav.current
     val dialogs = LocalDialogs.current
-    DetailScaffold("Rooms", snackbar, onBack = { nav.pop() }, loading = vm.loading) { padding ->
+    fun addRoom() = dialogs.prompt("Add a room", "") { name -> vm.run("Room “$name” added") { it.createRoom(name) } }
+    DetailScaffold(
+        "Rooms", snackbar, onBack = { nav.pop() }, loading = vm.loading,
+        // Also at the top, so it can be reached without scrolling past a long list.
+        actions = { IconButton(onClick = ::addRoom) { Icon(Icons.Default.Add, contentDescription = "Add a room") } },
+    ) { padding ->
         SettingsColumn(padding) {
             val state = vm.state ?: return@SettingsColumn
             Section {
@@ -356,9 +362,7 @@ fun RoomsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                     }
                 }
                 if (state.rooms.isNotEmpty()) RowDivider()
-                InfoRow("Add a room", "Creates an empty room on the hub.") {
-                    dialogs.prompt("Add a room", "") { name -> vm.run("Room “$name” added") { it.createRoom(name) } }
-                }
+                InfoRow("Add a room", "Creates an empty room on the hub.") { addRoom() }
             }
         }
     }
@@ -505,7 +509,7 @@ fun RoomDetailsScreen(vm: HubViewModel, snackbar: SnackbarHostState, roomId: Int
             }
 
             Section {
-                InfoRow("Delete room", "Removes the room from the hub. Its devices stay paired.") {
+                InfoRow("Delete room", "Removes the room from the hub. Its devices stay paired.", titleColor = LocalAccents.current.danger) {
                     dialogs.confirm("Delete the room “${room.name}” from the hub? This cannot be undone.", "Delete") {
                         vm.run("Room “${room.name}” deleted", onSuccess = { nav.pop() }) { it.deleteRoom(room.id) }
                     }
@@ -561,7 +565,62 @@ fun DevicesScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
     val nav = LocalNav.current
     val dialogs = LocalDialogs.current
     val context = LocalContext.current
-    DetailScaffold("Devices", snackbar, onBack = { nav.pop() }, loading = vm.loading) { padding ->
+
+    fun startPairing() = dialogs.confirm(
+        "Open the hub for new devices for two minutes? Put the new device into pairing mode straight after.",
+        "Start",
+    ) { vm.run("The hub is accepting new devices for two minutes") { it.permitJoin(120) } }
+
+    fun addWithInstallCode() {
+        fun pair(found: dev.wiserlocal.app.InstallCode) {
+            dialogs.confirm(
+                "Add the device ${found.address}? Put it into pairing mode, then tap Add. The hub waits two minutes for it.",
+                "Add",
+            ) { vm.run("The hub is waiting for that device for two minutes") { it.pairWithInstallCode(found.address, found.code) } }
+        }
+        fun byHand() {
+            dialogs.prompt("Device address (16 characters)", "") { address ->
+                dialogs.prompt("Install code (36 characters)", "") { code ->
+                    if (!dev.wiserlocal.app.InstallCodeQr.isValid(address, code)) {
+                        dialogs.message(
+                            "Install code",
+                            "The address should be 16 and the install code 36 letters and numbers (0–9, A–F), as printed on the device.",
+                        )
+                    } else {
+                        pair(dev.wiserlocal.app.InstallCode(dev.wiserlocal.app.InstallCodeQr.clean(address), dev.wiserlocal.app.InstallCodeQr.clean(code)))
+                    }
+                }
+            }
+        }
+        dialogs.choice("Add a device with an install code", listOf("Scan the device's QR code", "Type the code by hand")) { pick ->
+            if (pick == 1) return@choice byHand()
+            val options = com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions.Builder()
+                .setBarcodeFormats(
+                    com.google.mlkit.vision.barcode.common.Barcode.FORMAT_QR_CODE,
+                    com.google.mlkit.vision.barcode.common.Barcode.FORMAT_DATA_MATRIX,
+                )
+                .build()
+            com.google.mlkit.vision.codescanner.GmsBarcodeScanning.getClient(context, options).startScan()
+                .addOnSuccessListener { barcode ->
+                    val found = barcode.rawValue?.let(dev.wiserlocal.app.InstallCodeQr::parse)
+                    if (found != null) pair(found)
+                    else dialogs.message("Install code", "That code doesn't hold a device address and install code. Try another code on the device or its box, or type it by hand.")
+                }
+                .addOnFailureListener { e -> vm.message = "The QR scanner isn't available: ${e.message ?: "unknown error"}" }
+        }
+    }
+
+    DetailScaffold(
+        "Devices", snackbar, onBack = { nav.pop() }, loading = vm.loading,
+        // The same two ways to add a device as at the bottom, reachable without scrolling.
+        actions = {
+            IconButton(onClick = {
+                dialogs.choice("Add a device", listOf("Add a device", "Add a device with an install code")) { pick ->
+                    if (pick == 0) startPairing() else addWithInstallCode()
+                }
+            }) { Icon(Icons.Default.Add, contentDescription = "Add a device") }
+        },
+    ) { padding ->
         SettingsColumn(padding) {
             val state = vm.state ?: return@SettingsColumn
             Section {
@@ -575,51 +634,9 @@ fun DevicesScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                 }
             }
             Section {
-                InfoRow("Add a device", "Lets a new thermostat or radiator valve join the hub.", showChevron = true) {
-                    dialogs.confirm(
-                        "Open the hub for new devices for two minutes? Put the new device into pairing mode straight after.",
-                        "Start",
-                    ) { vm.run("The hub is accepting new devices for two minutes") { it.permitJoin(120) } }
-                }
+                InfoRow("Add a device", "Lets a new thermostat or radiator valve join the hub.", showChevron = true) { startPairing() }
                 RowDivider()
-                InfoRow("Add a device with an install code", "Scan the QR code on devices that have one, such as newer radiator valves.", showChevron = true) {
-                    fun pair(found: dev.wiserlocal.app.InstallCode) {
-                        dialogs.confirm(
-                            "Add the device ${found.address}? Put it into pairing mode, then tap Add. The hub waits two minutes for it.",
-                            "Add",
-                        ) { vm.run("The hub is waiting for that device for two minutes") { it.pairWithInstallCode(found.address, found.code) } }
-                    }
-                    fun byHand() {
-                        dialogs.prompt("Device address (16 characters)", "") { address ->
-                            dialogs.prompt("Install code (36 characters)", "") { code ->
-                                if (!dev.wiserlocal.app.InstallCodeQr.isValid(address, code)) {
-                                    dialogs.message(
-                                        "Install code",
-                                        "The address should be 16 and the install code 36 letters and numbers (0–9, A–F), as printed on the device.",
-                                    )
-                                } else {
-                                    pair(dev.wiserlocal.app.InstallCode(dev.wiserlocal.app.InstallCodeQr.clean(address), dev.wiserlocal.app.InstallCodeQr.clean(code)))
-                                }
-                            }
-                        }
-                    }
-                    dialogs.choice("Add a device with an install code", listOf("Scan the device's QR code", "Type the code by hand")) { pick ->
-                        if (pick == 1) return@choice byHand()
-                        val options = com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions.Builder()
-                            .setBarcodeFormats(
-                                com.google.mlkit.vision.barcode.common.Barcode.FORMAT_QR_CODE,
-                                com.google.mlkit.vision.barcode.common.Barcode.FORMAT_DATA_MATRIX,
-                            )
-                            .build()
-                        com.google.mlkit.vision.codescanner.GmsBarcodeScanning.getClient(context, options).startScan()
-                            .addOnSuccessListener { barcode ->
-                                val found = barcode.rawValue?.let(dev.wiserlocal.app.InstallCodeQr::parse)
-                                if (found != null) pair(found)
-                                else dialogs.message("Install code", "That code doesn't hold a device address and install code. Try another code on the device or its box, or type it by hand.")
-                            }
-                            .addOnFailureListener { e -> vm.message = "The QR scanner isn't available: ${e.message ?: "unknown error"}" }
-                    }
-                }
+                InfoRow("Add a device with an install code", "Scan the QR code on devices that have one, such as newer radiator valves.", showChevron = true) { addWithInstallCode() }
                 RowDivider()
                 InfoRow("Stop adding devices", "Closes the hub to new devices straight away.") {
                     vm.run("The hub is no longer accepting new devices") { it.stopPairing() }
@@ -701,7 +718,7 @@ fun DeviceDetailsScreen(vm: HubViewModel, snackbar: SnackbarHostState, deviceId:
             if (!isHub) Section {
                 InfoRow("Identify", "Makes the device flash so you can find it.", showChevron = true) { vm.identify(device) }
                 RowDivider()
-                InfoRow("Delete", "Removes the device from the hub. It has to be paired again to come back.") {
+                InfoRow("Delete", "Removes the device from the hub. It has to be paired again to come back.", titleColor = LocalAccents.current.danger) {
                     dialogs.confirm("Remove this ${name.lowercase()} from the hub? It has to be paired again to come back.", "Delete") {
                         vm.run("$name removed", onSuccess = { nav.pop() }) { it.removeDevice(device.id) }
                     }

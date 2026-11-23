@@ -145,6 +145,8 @@ fun InfoRow(
     iconTint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     showChevron: Boolean = false,
     trailing: @Composable (() -> Unit)? = null,
+    /** For destructive rows (delete): the title in this colour. */
+    titleColor: Color = Color.Unspecified,
     onClick: (() -> Unit)? = null,
 ) {
     Row(
@@ -159,7 +161,7 @@ fun InfoRow(
             Spacer(Modifier.width(16.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = titleColor)
             if (!detail.isNullOrEmpty()) {
                 Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

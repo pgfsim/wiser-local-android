@@ -286,7 +286,7 @@ private fun ZigbeeGroupMembers(vm: HubViewModel, groupId: Int, name: String, dat
             dialogs.prompt("Group name", name) { n -> vm.run { it.updateZigbeeGroup(groupId, n.trim(), iconId, members) } }
         }
         RowDivider()
-        InfoRow("Delete group") {
+        InfoRow("Delete group", titleColor = LocalAccents.current.danger) {
             dialogs.confirm("Delete the group “$name”? Its lights and shutters stay on the hub.", "Delete") {
                 vm.run("Group deleted", onSuccess = { nav.pop() }) { it.deleteZigbeeGroup(groupId) }
             }
