@@ -73,7 +73,21 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
     @Volatile private var liveWanted = false
     private var liveThread: Thread? = null
     @Volatile private var liveStream: dev.wiserlocal.app.HubEventStream? = null
-    private val liveReload = Runnable { if (inFlight == 0) refresh() }
+    private var liveReloadPending = false
+    private var lastLiveReload = 0L
+    private val liveReload = Runnable {
+        liveReloadPending = false
+        lastLiveReload = System.currentTimeMillis()
+        if (inFlight == 0) refresh()
+    }
+
+    /** One reload shortly after a burst of changes, and at most one every few seconds. */
+    private fun scheduleLiveReload() {
+        if (liveReloadPending) return
+        liveReloadPending = true
+        val sinceLast = System.currentTimeMillis() - lastLiveReload
+        main.postDelayed(liveReload, maxOf(LIVE_RELOAD_DELAY_MS, LIVE_MIN_GAP_MS - sinceLast))
+    }
 
     var theme by mutableStateOf(prefs.theme); private set
     var favourites by mutableStateOf(prefs.favourites); private set
@@ -413,11 +427,13 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                     main.post { live = true }
                     backoffMs = 5_000L
                     stream.forEachEvent { name, data ->
+                        // "update" events name what changed ("/domain/Room/1", "/network/Station",
+                        // "/status"); only rooms, devices, schedules and so on change what the app shows.
+                        val relevant = name == "update" && (data.startsWith("/domain") || data.startsWith("/schedules"))
                         if (dev.wiserlocal.app.BuildConfig.DEBUG) {
-                            android.util.Log.d("WiserLive", "event $name, ${data.length} chars")
+                            android.util.Log.d("WiserLive", "event $name ${data.take(60)}${if (relevant) " -> reload" else ""}")
                         }
-                        main.removeCallbacks(liveReload)
-                        main.postDelayed(liveReload, LIVE_RELOAD_DELAY_MS)
+                        if (relevant) main.post(::scheduleLiveReload)
                     }
                 } catch (e: Exception) {
                     if (dev.wiserlocal.app.BuildConfig.DEBUG) android.util.Log.d("WiserLive", "stream ended: ${e.javaClass.simpleName}")
@@ -442,6 +458,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
         liveThread?.interrupt()
         liveThread = null
         main.removeCallbacks(liveReload)
+        liveReloadPending = false
         live = false
     }
 
@@ -490,4 +507,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
 }
 
 /** How long after a hub event to reload, so a burst of events causes one reload. */
-private const val LIVE_RELOAD_DELAY_MS = 1_500L
+private const val LIVE_RELOAD_DELAY_MS = 1_000L
+
+/** The least time between two reloads caused by hub events. */
+private const val LIVE_MIN_GAP_MS = 5_000L
