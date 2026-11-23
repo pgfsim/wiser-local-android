@@ -88,6 +88,17 @@ fun SettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                     nav.stack.clear()
                     nav.tab = Tab.INSIGHTS
                 }
+                RowDivider()
+                SwitchRow(
+                    "Control away from home (experimental)",
+                    if (vm.cloudSignedIn) {
+                        "When the hub can't be reached on this network, commands go through Wiser's cloud using your Wiser account."
+                    } else {
+                        "Sign in to your Wiser account first. Commands then go through Wiser's cloud when the hub can't be reached."
+                    },
+                    vm.remoteControl && vm.cloudSignedIn,
+                    enabled = vm.cloudSignedIn,
+                ) { on -> vm.changeRemoteControl(on) }
             }
             Section {
                 InfoRow("Home screen", "Choose and order your favourites", showChevron = true) { nav.push(Screen.HomeLayout) }

@@ -61,6 +61,12 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
     /** One-off message for the snackbar; the UI clears it once shown. */
     var message by mutableStateOf<String?>(null)
 
+    /** Experimental: reach the hub through Wiser's cloud when away from home. */
+    var remoteControl by mutableStateOf(prefs.remoteControl); private set
+
+    /** True when the last load went through Wiser's cloud rather than straight to the hub. */
+    var viaCloud by mutableStateOf(false); private set
+
     var theme by mutableStateOf(prefs.theme); private set
     var favourites by mutableStateOf(prefs.favourites); private set
 
@@ -73,7 +79,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
     // Wiser cloud account, for Insights. Runs on its own thread so it never holds up the hub.
     private val cloudStore = CloudStore(app)
     private val cloudIo = Executors.newSingleThreadExecutor()
-    @Volatile private var session: CloudSession? = null
+    private val session: CloudSession? get() = dev.wiserlocal.app.CloudAuth.session
     var cloudAccount by mutableStateOf(cloudStore.account); private set
     var cloudSignedIn by mutableStateOf(cloudStore.refreshToken != null); private set
     var cloudBusy by mutableStateOf(false); private set
@@ -176,6 +182,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                         loaded.openTherm?.let { openTherm = it }
                         error = null
                         updatedAt = System.currentTimeMillis()
+                        viaCloud = hub.usedCloud
                         TempWidgetProvider.render(getApplication(), loaded.state)
                     },
                     onFailure = { error = errorText(it) },
@@ -333,10 +340,38 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
      * A current access token for Wiser's cloud, renewing it with the saved
      * refresh token when it has run out. Call off the main thread.
      */
-    fun cloudAccessToken(): String {
-        session?.takeIf { System.currentTimeMillis() < it.expiresAtMs }?.let { return it.accessToken }
-        val refresh = cloudStore.refreshToken ?: throw CloudAuthException("Not signed in")
-        return WiserCloud(cloudStore.base).refresh(refresh).also(::keepSession).accessToken
+    fun cloudAccessToken(): String = dev.wiserlocal.app.CloudAuth.accessToken(getApplication())
+
+    /**
+     * Turns the cloud route on or off. Turning it on needs the hub's cloud id, which comes
+     * from its MAC address, so the first time it has to be done at home.
+     */
+    fun changeRemoteControl(on: Boolean) {
+        if (!on) {
+            prefs.remoteControl = false
+            remoteControl = false
+            viaCloud = false
+            return
+        }
+        if (prefs.hubCloudId != null) {
+            prefs.remoteControl = true
+            remoteControl = true
+            return
+        }
+        val hub = WiserHub(prefs.host, prefs.secret) // straight to the hub: the id isn't known yet
+        io.execute {
+            val id = runCatching { hub.fetchMacAddress()?.let(dev.wiserlocal.app.CloudRelay::urnForMac) }
+            main.post {
+                val urn = id.getOrNull()
+                if (urn != null) {
+                    prefs.hubCloudId = urn
+                    prefs.remoteControl = true
+                    remoteControl = true
+                } else {
+                    message = "Turn this on at home, while the app can reach the hub, so it can learn the hub's id"
+                }
+            }
+        }
     }
 
     fun cloudSignOut() {
@@ -358,14 +393,10 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun keepSession(s: CloudSession) {
-        session = s
-        cloudStore.refreshToken = s.refreshToken
-        cloudStore.account = s.account
-    }
+    private fun keepSession(s: CloudSession) = dev.wiserlocal.app.CloudAuth.keep(getApplication(), s)
 
     private fun forgetSession() {
-        session = null
+        dev.wiserlocal.app.CloudAuth.forget()
         report = null
         overview = null
         cloudStore.clear()

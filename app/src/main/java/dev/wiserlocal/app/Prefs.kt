@@ -4,6 +4,7 @@ import android.content.Context
 
 /** Hub connection details and app options, kept in app-private storage. */
 class Prefs(context: Context) {
+    private val app = context.applicationContext
     private val sp = context.applicationContext.getSharedPreferences("wiser", Context.MODE_PRIVATE)
 
     var host: String
@@ -41,7 +42,25 @@ class Prefs(context: Context) {
         get() = sp.getLong("lastUpdateCheck", 0)
         set(v) = sp.edit().putLong("lastUpdateCheck", v).apply()
 
+    /** Experimental: reach the hub through Wiser's cloud when it isn't on this network. */
+    var remoteControl: Boolean
+        get() = sp.getBoolean("remoteControl", false)
+        set(v) = sp.edit().putBoolean("remoteControl", v).apply()
+
+    /** The hub's id in Wiser's cloud, learned from its MAC address while at home. */
+    var hubCloudId: String?
+        get() = sp.getString("hubCloudId", null)
+        set(v) = sp.edit().putString("hubCloudId", v).apply()
+
     val configured: Boolean get() = host.isNotBlank() && secret.isNotBlank()
 
-    fun hub() = WiserHub(host, secret)
+    fun hub() = WiserHub(host, secret, relay())
+
+    private fun relay(): CloudRelay? {
+        if (!remoteControl) return null
+        val id = hubCloudId ?: return null
+        val store = CloudStore(app)
+        if (store.refreshToken == null) return null
+        return CloudRelay(store.base, id, accessToken = { CloudAuth.accessToken(app) }, expireToken = { CloudAuth.expire() })
+    }
 }

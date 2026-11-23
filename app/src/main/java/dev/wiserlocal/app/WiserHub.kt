@@ -199,7 +199,16 @@ enum class HotWaterMode { AUTO, ON, OFF }
  * tenths of a degree, so 20.5°C is sent as 205, and schedule times are HHMM
  * integers, so 06:30 is sent as 630.
  */
-class WiserHub(host: String, private val secret: String) {
+class WiserHub(
+    host: String,
+    private val secret: String,
+    /** Experimental: used when the hub can't be reached on this network. */
+    private val relay: CloudRelay? = null,
+) {
+
+    /** True once a request from this instance went through Wiser's cloud. */
+    @Volatile var usedCloud = false
+        private set
 
     private val host = host.trim().removePrefix("http://").removePrefix("https://").trimEnd('/')
 
@@ -522,6 +531,12 @@ class WiserHub(host: String, private val secret: String) {
     fun identifyDevice(deviceId: Int, on: Boolean) = patch("Device/$deviceId", """{"Identify":$on}""")
 
     /** The hub's Wi-Fi details as (label, value) pairs; empty if it does not report them. */
+    /** The hub's Wi-Fi MAC address, which also names it in Wiser's cloud. */
+    fun fetchMacAddress(): String? {
+        val text = attempt("GET", "/data/v2/network/", null) ?: return null
+        return JSONObject(text).optJSONObject("Station")?.optStringOrNull("MacAddress")
+    }
+
     fun fetchNetwork(): List<Pair<String, String>> {
         val text = attempt("GET", "/data/v2/network/", null) ?: return emptyList()
         val station = JSONObject(text).optJSONObject("Station") ?: return emptyList()
@@ -899,8 +914,41 @@ class WiserHub(host: String, private val secret: String) {
         throw IOException("Hub returned HTTP 404 for $path")
     }
 
-    /** One request, switching to HTTPS if the hub asks for it. Returns null on 404. */
+    /**
+     * One request; null on 404. Goes to the hub directly, or through Wiser's cloud when
+     * [relay] is set and the hub can't be reached (then the cloud is used for a minute
+     * before the direct route is tried again, so each request doesn't wait for a timeout).
+     */
     private fun attempt(method: String, fullPath: String, body: String?): String? {
+        if (relay != null && System.currentTimeMillis() < localDownUntil) return relayAttempt(relay, method, fullPath, body)
+        return try {
+            localAttempt(method, fullPath, body)
+        } catch (e: IOException) {
+            if (relay == null || !unreachable(e)) throw e
+            localDownUntil = System.currentTimeMillis() + LOCAL_RETRY_MS
+            relayAttempt(relay, method, fullPath, body)
+        }
+    }
+
+    private fun relayAttempt(relay: CloudRelay, method: String, fullPath: String, body: String?): String? {
+        val (code, text) = relay.send(method, fullPath, body)
+        usedCloud = true
+        return when {
+            code == 404 -> null
+            code !in 200..299 -> throw IOException("Hub returned HTTP $code (through Wiser's cloud)")
+            else -> text
+        }
+    }
+
+    /** Only failures to connect at all; a hub that is slow to answer may still have acted. */
+    private fun unreachable(e: IOException): Boolean = when (e) {
+        is java.net.ConnectException, is java.net.NoRouteToHostException, is java.net.UnknownHostException -> true
+        is java.net.SocketTimeoutException -> e.message.orEmpty().contains("connect", ignoreCase = true)
+        else -> false
+    }
+
+    /** One request straight to the hub, switching to HTTPS if the hub asks for it. Returns null on 404. */
+    private fun localAttempt(method: String, fullPath: String, body: String?): String? {
         repeat(2) {
             val https = host in httpsHosts
             val conn = open(URL((if (https) "https" else "http") + "://$host$fullPath"))
@@ -959,6 +1007,10 @@ class WiserHub(host: String, private val secret: String) {
         val DAYS = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
         private val BASE_PATHS = listOf("/data/v2/domain/", "/data/domain/")
+
+        /** Until when the hub counts as out of reach, so requests go straight to the cloud. */
+        @Volatile private var localDownUntil = 0L
+        private const val LOCAL_RETRY_MS = 60_000L
         private const val SECRET_REJECTED = "The hub rejected the secret"
         private const val SCHEDULES_PATH = "/data/v2/schedules/"
         private const val CANCEL_OVERRIDE = """{"RequestOverride":{"Type":"None"}}"""

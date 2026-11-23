@@ -191,7 +191,7 @@ The automation editor uses the hub's limits for conditions, times and actions (`
 
 ## Wiser account (Insights)
 
-Only Insights uses the internet. It signs in to Wiser's cloud the same way the
+Only Insights (and the experimental remote control below) uses the internet. It signs in to Wiser's cloud the same way the
 official app does: `POST https://api-nl.wiserair.com/Login` with the official
 app's client id in a `Basic` header and `grant_type=password` (or
 `grant_type=refresh_token` to renew), and `POST /api/account/logout` to sign
@@ -205,6 +205,27 @@ official app shows in a web view. It has no data API, so the app requests
 `MonthTemperature`) with the access token as a `Bearer` header, keeps the
 site's session cookie in memory, and reads the readings out of the chart
 script in the returned page. A change to that page could break it.
+
+### Control away from home (experimental)
+
+Off by default, under **Settings → Wiser account**. When it is on and the hub
+can't be reached on the current network, the app sends the same requests through
+Wiser's cloud, as the official app does away from home:
+
+```
+POST https://api-nl.wiserair.com/api/wcs2/rpc/public_genie/web_action
+Authorization: Bearer <access token>
+Wiser-deviceId: base64("urn:dev:opm:SchneiderElectric-WiserHeat-<hub MAC>")
+
+{"method":"WebMethod_PATCH","urlPath":"/v2/domain/Room/1","body":"{...}"}
+```
+
+The answer is `{"resultCode":200,"body":"<the hub's own answer>"}`. The hub's id
+comes from its MAC address, so the switch has to be turned on once at home. If
+the hub can't be reached, the cloud is used for the next minute before the
+direct route is tried again. The Home screen says "through Wiser's cloud" when
+that is how it last loaded. This is undocumented and may change; the network
+details page and Moment or automation details may not come through it.
 
 ## Limitations
 
