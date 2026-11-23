@@ -14,8 +14,11 @@ The app has four tabs, plus a settings page behind the gear icon:
   second or two; the status line then says "live".
 - **Automations:** Moments (create, edit, rename, delete and run; each action sets a
   room's temperature, boosts it for a time or sends it back to its schedule, or turns
-  the hot water on, off, on for a time or back to its schedule; waits and
-  notifications added in the official app are kept), Schedules
+  the hot water on, off, on for a time or back to its schedule; on hubs with
+  them, a light on, off or dimmed, a smart plug on or off, a shutter lifted or
+  tilted to a position, a cooling room's mode or on/off, or a room's heating
+  level in percent; waits and notifications added in the official app are
+  kept), Schedules
   (a weekly editor for each heating schedule and for hot water, with copy and
   paste as text, like "Monday: 06:00 19.0, 08:00 17.5, 22:00 Off"; add, rename,
   copy and delete heating schedules), and automations (create and edit them:
@@ -34,7 +37,8 @@ The app has four tabs, plus a settings page behind the gear icon:
 - **Settings:** hub connection (scan the QR code on the hub to get its secret,
   and automatic hub discovery), rooms (each
   with its device count; a room page to rename it, choose or edit its schedule,
-  switch open window detection, set its heating type and occupancy settings, see
+  switch open window detection, set its heating type and occupancy settings,
+  choose its heating channel on hubs with more than one, see
   its devices and delete it), devices (a page each with its name, battery,
   signal and readings, its room, button lock, radiator valve battery type,
   firmware, identify and delete; add a new device, with an install code if it

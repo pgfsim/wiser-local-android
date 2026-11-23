@@ -427,6 +427,31 @@ fun RoomDetailsScreen(vm: HubViewModel, snackbar: SnackbarHostState, roomId: Int
                 }
             }
 
+            // Hubs with more than one heating channel (relay): which one heats this room, as the
+            // official app offers for radiator rooms. Hubs flagged RoomSupports2HeatChannels let a
+            // room be on several channels.
+            val channels = state.heatingChannels
+            if (channels.size >= 2 && (room.heatingType == null || room.heatingType == "HydronicRadiator")) {
+                val mine = channels.filter { room.id in it.roomIds }
+                val several = state.features.flags["RoomSupports2HeatChannels"] == true
+                Section("Heating channel") {
+                    InfoRow(
+                        "Channel",
+                        mine.joinToString(", ") { it.name }.ifEmpty { "None" },
+                        showChevron = true,
+                    ) {
+                        val choices: List<Pair<String, Set<Int>>> = channels.map { it.name to setOf(it.id) } +
+                            listOfNotNull(if (several) "All channels" to channels.map { it.id }.toSet() else null) +
+                            ("None" to emptySet<Int>())
+                        val currentIds = mine.map { it.id }.toSet()
+                        dialogs.choice("Heating channel for ${room.name}", choices.map { it.first }, choices.indexOfFirst { it.second == currentIds }) { pick ->
+                            val target = choices[pick].second
+                            if (target != currentIds) vm.run { it.setRoomChannels(channels, room.id, target) }
+                        }
+                    }
+                }
+            }
+
             room.occupancy?.let { occ ->
                 Section("Occupancy") {
                     val offsets = (0..10).toList()

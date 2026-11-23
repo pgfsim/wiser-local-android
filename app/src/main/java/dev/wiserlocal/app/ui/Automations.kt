@@ -237,6 +237,23 @@ fun ListCard(
 
 /** ("Living Room", "17.0°"), ("Hot water", "On for 1 hour"), and so on. */
 fun describeAction(action: MomentAction, state: HubState): Pair<String, String> {
+    when (action.type) {
+        MomentAction.TYPE_LIGHT -> return (state.lights.firstOrNull { it.id == action.id }?.name ?: "Light ${action.id}") to when {
+            action.setPoint <= 0 -> "Off"
+            action.setPoint >= 100 -> "On"
+            else -> "${action.setPoint}%"
+        }
+        MomentAction.TYPE_PLUG -> return (state.plugs.firstOrNull { it.id == action.id }?.name ?: "Plug ${action.id}") to
+            (if (action.setPoint != 0) "On" else "Off")
+        MomentAction.TYPE_SHUTTER -> return (state.shutters.firstOrNull { it.id == action.id }?.name ?: "Shutter ${action.id}") to
+            "${if (action.text == "TiltTo") "Tilt" else "Lift"} to ${action.setPoint}%"
+    }
+    val roomName = state.rooms.firstOrNull { it.id == action.id }?.name ?: "Room ${action.id}"
+    when (action.type) {
+        MomentAction.TYPE_PERCENT -> return roomName to "Heating ${action.setPoint}%"
+        MomentAction.TYPE_HVAC -> return roomName to "Mode: ${action.text ?: "Auto"}"
+        MomentAction.TYPE_CLIMATE -> return roomName to (if (action.text.equals("On", true)) "Climate on" else "Climate off")
+    }
     if (action.type == MomentAction.TYPE_WAIT) return "Wait" to durationText(action.durationMinutes ?: 0)
     if (action.type == MomentAction.TYPE_NOTIFY) return "Notification" to "Send"
     val value = when {

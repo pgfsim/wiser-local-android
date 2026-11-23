@@ -47,6 +47,8 @@ data class Room(
     val heatingType: String? = null,
     /** Occupancy settings, only for rooms the hub marks OccupancyCapable. */
     val occupancy: RoomOccupancy? = null,
+    /** The room can cool as well as heat (the hub reports HvacMode for it). */
+    val cooling: Boolean = false,
 )
 
 /**
@@ -174,6 +176,8 @@ data class MomentAction(
     val setPoint: Int,
     val durationMinutes: Int? = null,
     val type: String = TYPE_MANUAL,
+    /** Cooling mode ("Cool", "Heat", ...), "On"/"Off", or a shutter's "LiftTo"/"TiltTo". */
+    val text: String? = null,
 ) {
     companion object {
         const val TYPE_MANUAL = "Manual"
@@ -183,6 +187,18 @@ data class MomentAction(
         const val TYPE_WAIT = "Wait"
         /** Sends a notification to the phone (official app only). */
         const val TYPE_NOTIFY = "Notify"
+        /** A room without a temperature input: heating level [setPoint] percent. */
+        const val TYPE_PERCENT = "Percent"
+        /** A cooling room's mode, in [text] (Cool, Heat, Fan, Dry, Auto, Stop). */
+        const val TYPE_HVAC = "HvacMode"
+        /** A cooling room switched on or off, in [text]. */
+        const val TYPE_CLIMATE = "ClimateOnOff"
+        /** A light: [setPoint] percent (0 off; 100 on for lights that don't dim). */
+        const val TYPE_LIGHT = "Light"
+        /** A smart plug: [setPoint] 1 on, 0 off. */
+        const val TYPE_PLUG = "Plug"
+        /** A shutter: [text] LiftTo or TiltTo, [setPoint] percent. */
+        const val TYPE_SHUTTER = "Shutter"
     }
 }
 
@@ -198,7 +214,19 @@ data class HubState(
     val automations: List<Automation> = emptyList(),
     /** What this hub's firmware supports. */
     val features: HubFeatures = HubFeatures(),
+    /** Lights, smart plugs and shutters, for Moments. Empty on hubs without them. */
+    val lights: List<SimpleDevice> = emptyList(),
+    val plugs: List<SimpleDevice> = emptyList(),
+    val shutters: List<SimpleDevice> = emptyList(),
+    /** The hub's heating channels (relays), with the rooms each one heats. */
+    val heatingChannels: List<HeatingChannel> = emptyList(),
 )
+
+/** A light, smart plug or shutter: [extra] is "dims" for a dimmable light, "tilts" for a tilting shutter. */
+data class SimpleDevice(val id: Int, val name: String, val extra: Boolean = false)
+
+/** One heating channel (relay) and the rooms it heats. */
+data class HeatingChannel(val id: Int, val name: String, val roomIds: List<Int>)
 
 /**
  * One change point in a day. [value] is the target in tenths of a degree for a
@@ -297,6 +325,7 @@ class WiserHub(
                 windowOpen = o.optString("WindowState") == "Open",
                 windowDetection = o.optBooleanOrNull("WindowDetectionActive"),
                 heatingType = o.optStringOrNull("HeatingType"),
+                cooling = o.has("HvacMode"),
                 occupancy = if (o.optBoolean("OccupancyCapable", false)) RoomOccupancy(
                     o.optInt("UnoccupiedOffset", 0),
                     o.optInt("OccupiedToUnoccupiedDelay", 1),
@@ -406,7 +435,31 @@ class WiserHub(
             automations += Automation(id, name, o.optInt("IconId", 0), o.optBoolean("Enabled", true), o.optBoolean("EnableNotification", false))
         }
 
-        return HubState(rooms, hotWater, system, devices, moments, automations, HubFeatures.parse(json))
+        fun simple(key: String, extraKey: String?): List<SimpleDevice> {
+            val out = mutableListOf<SimpleDevice>()
+            json.optJSONArray(key).forEachObject { o ->
+                val id = o.optInt("id")
+                out += SimpleDevice(id, o.optStringOrNull("Name") ?: "$key $id", extraKey?.let { o.optBoolean(it, false) } ?: false)
+            }
+            return out
+        }
+        val channels = mutableListOf<HeatingChannel>()
+        json.optJSONArray("HeatingChannel").forEachObject { o ->
+            val ids = o.optJSONArray("RoomIds")
+            val id = o.optInt("id")
+            channels += HeatingChannel(
+                id,
+                o.optStringOrNull("Name")?.replace('-', ' ') ?: "Channel $id",
+                if (ids == null) emptyList() else List(ids.length()) { ids.optInt(it) },
+            )
+        }
+        return HubState(
+            rooms, hotWater, system, devices, moments, automations, HubFeatures.parse(json),
+            lights = simple("Light", "IsDimmable"),
+            plugs = simple("SmartPlug", null),
+            shutters = simple("Shutter", "IsTiltSupported"),
+            heatingChannels = channels,
+        )
     }
 
     fun setRoomTemp(roomId: Int, tempC: Double) {
@@ -467,6 +520,19 @@ class WiserHub(
             .put("MinimumOccupiedTime", occupancy.minOccupiedMinutes)
             .toString(),
     )
+
+    /**
+     * Puts the room in exactly the channels [channelIds], as the official app does: the
+     * hub's whole channel list goes back with the room's id moved between channels.
+     */
+    fun setRoomChannels(channels: List<HeatingChannel>, roomId: Int, channelIds: Set<Int>) {
+        val list = JSONArray()
+        channels.forEach { c ->
+            val rooms = c.roomIds.filter { it != roomId } + listOfNotNull(roomId.takeIf { c.id in channelIds })
+            list.put(JSONObject().put("id", c.id).put("RoomIds", JSONArray(rooms)))
+        }
+        request("PATCH", "", JSONObject().put("HeatingChannel", list).toString())
+    }
 
     fun setWindowDetection(roomId: Int, enabled: Boolean) =
         patch("Room/$roomId", """{"WindowDetectionActive":$enabled}""")
@@ -689,8 +755,29 @@ class WiserHub(
         if (noTarget && json.optBoolean("EnableNotification", false)) {
             return MomentAction("", 0, 0, null, MomentAction.TYPE_NOTIFY)
         }
-        if (json.optString("Action") != "RequestOverride") return null
         // Extras the official app sends as null; anything set alongside an action is beyond this app.
+        if (json.has("Wait") && !json.isNull("Wait")) return null
+        if (json.optBoolean("EnableNotification", false)) return null
+        val id = json.optInt("Id")
+        val raw = json.optString("Value")
+        when (json.optString("Domain") to json.optString("Action")) {
+            "Room" to "HVACMode" -> return MomentAction("Room", id, 0, null, MomentAction.TYPE_HVAC, raw)
+            "Room" to "ClimateOnOff" -> return MomentAction("Room", id, 0, null, MomentAction.TYPE_CLIMATE, raw)
+            "SmartPlug" to "RequestOutput" ->
+                return MomentAction("SmartPlug", id, if (raw.equals("On", true)) 1 else 0, null, MomentAction.TYPE_PLUG)
+            "Light" to "RequestOverride" -> {
+                val v = raw.takeIf { it.startsWith("{") }?.let { JSONObject(it) } ?: return null
+                val on = v.optString("state").equals("On", true)
+                val level = if (!on) 0 else if (v.has("percentage")) v.optInt("percentage") else 100
+                return MomentAction("Light", id, level, null, MomentAction.TYPE_LIGHT)
+            }
+            "Shutter" to "RequestAction" -> {
+                val v = raw.takeIf { it.startsWith("{") }?.let { JSONObject(it) } ?: return null
+                val action = v.optString("action").takeIf { it == "LiftTo" || it == "TiltTo" } ?: return null
+                return MomentAction("Shutter", id, v.optInt("percentage").coerceIn(0, 100), null, MomentAction.TYPE_SHUTTER, action)
+            }
+        }
+        if (json.optString("Action") != "RequestOverride") return null
         if (json.has("Wait") && !json.isNull("Wait")) return null
         if (json.has("EnableNotification") && !json.isNull("EnableNotification") && json.optBoolean("EnableNotification")) return null
         val value = json.optString("Value").takeIf { it.startsWith("{") }?.let { JSONObject(it) } ?: return null
@@ -707,6 +794,9 @@ class WiserHub(
             // Cancels a boost or override: back to the schedule.
             type.equals(MomentAction.TYPE_NONE, ignoreCase = true) ->
                 MomentAction(domain, json.optInt("Id"), 0, null, MomentAction.TYPE_NONE)
+            // A room set by heating level rather than temperature.
+            type.equals(MomentAction.TYPE_MANUAL, ignoreCase = true) && domain == "Room" && value.has("percentageDemand") ->
+                MomentAction(domain, json.optInt("Id"), value.optInt("percentageDemand"), null, MomentAction.TYPE_PERCENT)
             else -> null
         }
     }
@@ -759,6 +849,31 @@ class WiserHub(
                 .put("Value", JSONObject.NULL)
                 .put("Wait", if (action.type == MomentAction.TYPE_WAIT) minutes / 60 * 100 + minutes % 60 else JSONObject.NULL)
                 .put("EnableNotification", if (action.type == MomentAction.TYPE_NOTIFY) true else JSONObject.NULL)
+                .toString()
+        }
+        // Other actions, in the official app's shapes (Value is a plain string or a JSON string).
+        val other: Pair<String, String>? = when (action.type) {
+            MomentAction.TYPE_HVAC -> "HVACMode" to (action.text ?: "Auto")
+            MomentAction.TYPE_CLIMATE -> "ClimateOnOff" to (action.text ?: "On")
+            MomentAction.TYPE_PLUG -> "RequestOutput" to (if (action.setPoint != 0) "On" else "Off")
+            MomentAction.TYPE_LIGHT -> "RequestOverride" to JSONObject().put("state", if (action.setPoint > 0) "On" else "Off").also { o ->
+                // Only dimmers get a level; the official app leaves it out for plain lights and for off.
+                if (action.setPoint in 1..99) o.put("percentage", action.setPoint)
+            }.toString()
+            MomentAction.TYPE_SHUTTER -> "RequestAction" to JSONObject()
+                .put("action", action.text ?: "LiftTo").put("percentage", action.setPoint.coerceIn(0, 100)).toString()
+            MomentAction.TYPE_PERCENT -> "RequestOverride" to JSONObject()
+                .put("type", "Manual").put("percentageDemand", action.setPoint.coerceIn(0, 100)).toString()
+            else -> null
+        }
+        if (other != null) {
+            return@joinToString JSONObject()
+                .put("Domain", action.domain)
+                .put("Id", action.id)
+                .put("Action", other.first)
+                .put("Value", other.second)
+                .put("Wait", JSONObject.NULL)
+                .put("EnableNotification", JSONObject.NULL)
                 .toString()
         }
         // The same three shapes the official app writes.

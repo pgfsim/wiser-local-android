@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import dev.wiserlocal.app.HubState
 import dev.wiserlocal.app.MomentAction
 import dev.wiserlocal.app.R
+import dev.wiserlocal.app.Room
 import dev.wiserlocal.app.WiserHub
 
 /** Create or edit a Moment: its name at the top, its actions below. */
@@ -223,6 +224,13 @@ private fun ActionCard(action: MomentAction, state: HubState, onClick: () -> Uni
     val accents = LocalAccents.current
     val water = action.domain == "HotWater"
     val other = action.type == MomentAction.TYPE_WAIT || action.type == MomentAction.TYPE_NOTIFY
+    // Lights, plugs and shutters get their kind as the title and their name below it.
+    val device = when (action.domain) {
+        "Light" -> "Light"
+        "SmartPlug" -> "Smart plug"
+        "Shutter" -> "Shutter"
+        else -> null
+    }
     val (target, value) = describeAction(action, state)
     Card(
         shape = CardShape,
@@ -234,14 +242,14 @@ private fun ActionCard(action: MomentAction, state: HubState, onClick: () -> Uni
     ) {
         Row(Modifier.padding(start = 16.dp, top = 14.dp, bottom = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
-                if (other) painterResource(R.drawable.ic_moment) else if (water) waterIcon() else flameIcon(),
+                if (other || device != null) painterResource(R.drawable.ic_moment) else if (water) waterIcon() else flameIcon(),
                 contentDescription = null,
                 tint = if (water) accents.water else accents.heat,
                 modifier = Modifier.size(28.dp),
             )
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(if (other) target else if (water) "Hot water" else "Heating", style = MaterialTheme.typography.titleMedium)
+                Text(device ?: if (other) target else if (water) "Hot water" else "Heating", style = MaterialTheme.typography.titleMedium)
                 if (!water && !other) Text(target, style = MaterialTheme.typography.bodyMedium)
             }
             Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium)
@@ -263,24 +271,67 @@ fun NoteCard(text: String) {
 
 /** Asks what an action should do: a room's temperature or off, or hot water on, off or boosted. */
 fun pickMomentAction(dialogs: DialogHost, state: HubState, current: MomentAction?, onPicked: (MomentAction) -> Unit) {
-    val targets = state.rooms.map { "Heating · ${it.name}" } + listOfNotNull(state.hotWater?.let { "Hot water" })
+    val roomCount = state.rooms.size
+    val waterCount = if (state.hotWater != null) 1 else 0
+    val targets = state.rooms.map { "Heating · ${it.name}" } + listOfNotNull(state.hotWater?.let { "Hot water" }) +
+        state.lights.map { "Light · ${it.name}" } + state.plugs.map { "Smart plug · ${it.name}" } +
+        state.shutters.map { "Shutter · ${it.name}" }
+    val percents = (0..100 step 10).toList()
     dialogs.choice("What should it change?", targets) { index ->
+        // Lights, plugs and shutters come after the rooms and the hot water.
+        var i = index - roomCount - waterCount
+        if (i >= 0) {
+            state.lights.getOrNull(i)?.let { light ->
+                val levels = if (light.extra) percents else listOf(0, 100)
+                val labels = levels.map { if (it == 0) "Off" else if (it == 100) "On" else "$it%" }
+                dialogs.choice(light.name, labels) { pick -> onPicked(MomentAction("Light", light.id, levels[pick], null, MomentAction.TYPE_LIGHT)) }
+                return@choice
+            }
+            i -= state.lights.size
+            state.plugs.getOrNull(i)?.let { plug ->
+                dialogs.choice(plug.name, listOf("On", "Off")) { pick ->
+                    onPicked(MomentAction("SmartPlug", plug.id, if (pick == 0) 1 else 0, null, MomentAction.TYPE_PLUG))
+                }
+                return@choice
+            }
+            i -= state.plugs.size
+            state.shutters.getOrNull(i)?.let { shutter ->
+                fun pickLevel(action: String) = dialogs.choice(
+                    if (action == "TiltTo") "Tilt ${shutter.name} to" else "Lift ${shutter.name} to",
+                    percents.map { "$it%" },
+                ) { pick -> onPicked(MomentAction("Shutter", shutter.id, percents[pick], null, MomentAction.TYPE_SHUTTER, action)) }
+                if (shutter.extra) dialogs.choice(shutter.name, listOf("Lift to a position", "Tilt to an angle")) { pick ->
+                    pickLevel(if (pick == 0) "LiftTo" else "TiltTo")
+                } else pickLevel("LiftTo")
+            }
+            return@choice
+        }
         val room = state.rooms.getOrNull(index)
-        if (room != null) {
-            // The same choices as the official app: a temperature, a boost, or cancel a boost.
-            val options = listOf("Set a temperature") + DURATIONS.map { "Boost for ${durationText(it)}" } + "Back to schedule"
-            dialogs.choice(room.name, options) { pick ->
-                when {
-                    pick == 0 -> {
-                        val initial = current?.takeIf { it.domain == "Room" && it.id == room.id && it.type == MomentAction.TYPE_MANUAL }?.setPoint ?: 200
-                        dialogs.temperature(room.name, initial, allowOff = true) { tenths ->
-                            onPicked(MomentAction("Room", room.id, tenths))
-                        }
+        if (room != null && (room.cooling || room.tempC == null)) {
+            // Rooms without a temperature input are set by heating level; cooling rooms also have a mode and on/off.
+            val extras = buildList {
+                if (room.tempC == null) add("Set a heating level (%)")
+                if (room.cooling) { add("Cooling mode"); add("Switch climate on"); add("Switch climate off") }
+            }
+            val standard = listOf("Temperature, boost or schedule")
+            dialogs.choice(room.name, standard + extras) { pick ->
+                when ((standard + extras)[pick]) {
+                    "Set a heating level (%)" -> dialogs.choice("Heating level", percents.map { "$it%" }) { p ->
+                        onPicked(MomentAction("Room", room.id, percents[p], null, MomentAction.TYPE_PERCENT))
                     }
-                    pick <= DURATIONS.size -> onPicked(MomentAction("Room", room.id, 0, DURATIONS[pick - 1], MomentAction.TYPE_BOOST))
-                    else -> onPicked(MomentAction("Room", room.id, 0, null, MomentAction.TYPE_NONE))
+                    "Cooling mode" -> {
+                        val modes = listOf("Cool", "Heat", "Fan", "Dry", "Auto", "Stop")
+                        dialogs.choice("Mode", modes) { p -> onPicked(MomentAction("Room", room.id, 0, null, MomentAction.TYPE_HVAC, modes[p])) }
+                    }
+                    "Switch climate on" -> onPicked(MomentAction("Room", room.id, 0, null, MomentAction.TYPE_CLIMATE, "On"))
+                    "Switch climate off" -> onPicked(MomentAction("Room", room.id, 0, null, MomentAction.TYPE_CLIMATE, "Off"))
+                    else -> pickRoomAction(dialogs, room, current, onPicked)
                 }
             }
+            return@choice
+        }
+        if (room != null) {
+            pickRoomAction(dialogs, room, current, onPicked)
         } else {
             val water = state.hotWater ?: return@choice
             val options = listOf("On", "Off") + DURATIONS.map { "Boost for ${durationText(it)}" } + "Back to schedule"
@@ -294,6 +345,23 @@ fun pickMomentAction(dialogs: DialogHost, state: HubState, current: MomentAction
                     },
                 )
             }
+        }
+    }
+}
+
+/** The same choices as the official app for a heated room: a temperature, a boost, or cancel a boost. */
+private fun pickRoomAction(dialogs: DialogHost, room: Room, current: MomentAction?, onPicked: (MomentAction) -> Unit) {
+    val options = listOf("Set a temperature") + DURATIONS.map { "Boost for ${durationText(it)}" } + "Back to schedule"
+    dialogs.choice(room.name, options) { pick ->
+        when {
+            pick == 0 -> {
+                val initial = current?.takeIf { it.domain == "Room" && it.id == room.id && it.type == MomentAction.TYPE_MANUAL }?.setPoint ?: 200
+                dialogs.temperature(room.name, initial, allowOff = true) { tenths ->
+                    onPicked(MomentAction("Room", room.id, tenths))
+                }
+            }
+            pick <= DURATIONS.size -> onPicked(MomentAction("Room", room.id, 0, DURATIONS[pick - 1], MomentAction.TYPE_BOOST))
+            else -> onPicked(MomentAction("Room", room.id, 0, null, MomentAction.TYPE_NONE))
         }
     }
 }
