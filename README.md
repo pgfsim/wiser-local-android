@@ -4,6 +4,16 @@ A small, unofficial Android app for Drayton Wiser heating hubs. It talks straigh
 to the hub over your home network using the hub's local REST API, with no cloud
 account involved*.
 
+<p>
+  <img src="docs/screenshots/home.png" width="180" alt="Home tab: boiler status, away mode and a favourite room">
+  <img src="docs/screenshots/control.png" width="180" alt="Control tab: a room's temperature, mode and boost">
+  <img src="docs/screenshots/moments.png" width="180" alt="Moments with their actions and run buttons">
+  <img src="docs/screenshots/schedule.png" width="180" alt="Weekly schedule editor for a room">
+  <img src="docs/screenshots/home-dark.png" width="180" alt="Home tab in dark theme">
+</p>
+
+<sub>Screenshots show example data, not a real home.</sub>
+
 The app has four tabs, plus a settings page behind the gear icon:
 
 - **Home:** whether the boiler or heat source is being called for heat, away mode, boost all
