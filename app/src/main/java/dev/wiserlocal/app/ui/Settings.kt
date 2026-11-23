@@ -520,6 +520,7 @@ fun deviceDetails(device: Device): List<String> = listOfNotNull(
 fun DevicesScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
     val nav = LocalNav.current
     val dialogs = LocalDialogs.current
+    val context = LocalContext.current
     DetailScaffold("Devices", snackbar, onBack = { nav.pop() }, loading = vm.loading) { padding ->
         SettingsColumn(padding) {
             val state = vm.state ?: return@SettingsColumn
@@ -541,17 +542,42 @@ fun DevicesScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                     ) { vm.run("The hub is accepting new devices for two minutes") { it.permitJoin(120) } }
                 }
                 RowDivider()
-                InfoRow("Add a device with an install code", "For devices that came with a code to enter.", showChevron = true) {
-                    dialogs.prompt("Device address (MAC or EUI-64)", "") { address ->
-                        val ieee = address.filter { it.isLetterOrDigit() }.uppercase()
-                        if (ieee.length != 16 || ieee.any { it !in "0123456789ABCDEF" }) {
-                            dialogs.message("Install code", "The address should be 16 hexadecimal characters, as printed on the device.")
-                            return@prompt
+                InfoRow("Add a device with an install code", "Scan the QR code on devices that have one, such as newer radiator valves.", showChevron = true) {
+                    fun pair(found: dev.wiserlocal.app.InstallCode) {
+                        dialogs.confirm(
+                            "Add the device ${found.address}? Put it into pairing mode, then tap Add. The hub waits two minutes for it.",
+                            "Add",
+                        ) { vm.run("The hub is waiting for that device for two minutes") { it.pairWithInstallCode(found.address, found.code) } }
+                    }
+                    fun byHand() {
+                        dialogs.prompt("Device address (16 characters)", "") { address ->
+                            dialogs.prompt("Install code (36 characters)", "") { code ->
+                                if (!dev.wiserlocal.app.InstallCodeQr.isValid(address, code)) {
+                                    dialogs.message(
+                                        "Install code",
+                                        "The address should be 16 and the install code 36 letters and numbers (0–9, A–F), as printed on the device.",
+                                    )
+                                } else {
+                                    pair(dev.wiserlocal.app.InstallCode(dev.wiserlocal.app.InstallCodeQr.clean(address), dev.wiserlocal.app.InstallCodeQr.clean(code)))
+                                }
+                            }
                         }
-                        dialogs.prompt("Install code", "") { code ->
-                            val clean = code.filter { it.isLetterOrDigit() }.uppercase()
-                            vm.run("The hub is waiting for that device for two minutes") { it.pairWithInstallCode(ieee, clean) }
-                        }
+                    }
+                    dialogs.choice("Add a device with an install code", listOf("Scan the device's QR code", "Type the code by hand")) { pick ->
+                        if (pick == 1) return@choice byHand()
+                        val options = com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions.Builder()
+                            .setBarcodeFormats(
+                                com.google.mlkit.vision.barcode.common.Barcode.FORMAT_QR_CODE,
+                                com.google.mlkit.vision.barcode.common.Barcode.FORMAT_DATA_MATRIX,
+                            )
+                            .build()
+                        com.google.mlkit.vision.codescanner.GmsBarcodeScanning.getClient(context, options).startScan()
+                            .addOnSuccessListener { barcode ->
+                                val found = barcode.rawValue?.let(dev.wiserlocal.app.InstallCodeQr::parse)
+                                if (found != null) pair(found)
+                                else dialogs.message("Install code", "That code doesn't hold a device address and install code. Try another code on the device or its box, or type it by hand.")
+                            }
+                            .addOnFailureListener { e -> vm.message = "The QR scanner isn't available: ${e.message ?: "unknown error"}" }
                     }
                 }
                 RowDivider()

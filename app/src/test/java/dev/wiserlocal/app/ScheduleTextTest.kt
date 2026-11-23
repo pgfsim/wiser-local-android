@@ -39,6 +39,25 @@ class ScheduleTextTest {
     }
 
     @Test
+    fun readsDeviceInstallCodeQrCodes() {
+        val address = "000D6F0012345678"
+        val code = "83FED3407A939723A5C639B26916D505C3B5"
+        val expected = InstallCode(address, code)
+        assertEquals(expected, InstallCodeQr.parse("$address|$code"))
+        assertEquals(expected, InstallCodeQr.parse("Z\$A:$address\$I:$code\$M:WV704R0A0902"))
+        assertEquals(expected, InstallCodeQr.parse("$address $code"))
+        assertEquals(
+            expected,
+            InstallCodeQr.parse("EUI-64: 000D 6F00 1234 5678 Install Code: 83FE D340 7A93 9723 A5C6 39B2 6916 D505 C3B5"),
+        )
+        assertEquals(expected, InstallCodeQr.parse("${address.lowercase()}|${code.lowercase()}"))
+        assertNull(InstallCodeQr.parse("WIFI:S:Wiser_ABC123;T:WPA;P:x;;"))
+        assertNull(InstallCodeQr.parse("$address|83FED3407A939723A5C639B26916D505")) // code too short
+        assertTrue(InstallCodeQr.isValid("00:0D:6F:00:12:34:56:78", "83FE-D340-7A93-9723-A5C6-39B2-6916-D505-C3B5"))
+        assertTrue(!InstallCodeQr.isValid(address, "83FED3407A939723A5C639B26916D505"))
+    }
+
+    @Test
     fun readsHubWifiQrCodes() {
         assertEquals(HubWifi("Wiser_ABC123", "p;w:d"), HubSetupWifi.parse("WIFI:S:Wiser_ABC123;T:WPA;P:p\\;w\\:d;;"))
         assertEquals(HubWifi("WiserHeat0A1B2C", null), HubSetupWifi.parse("WIFI:T:nopass;S:WiserHeat0A1B2C;;"))

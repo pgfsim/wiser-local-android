@@ -38,7 +38,8 @@ The app has four tabs, plus a settings page behind the gear icon:
   its devices and delete it), devices (a page each with its name, battery,
   signal and readings, its room, button lock, radiator valve battery type,
   firmware, identify and delete; add a new device, with an install code if it
-  has one, or stop adding devices), away mode (away temperature, whether hot water turns off too),
+  has one, scanned from its QR code as the official app does for newer radiator
+  valves and other devices, or stop adding devices), away mode (away temperature, whether hot water turns off too),
   smart modes (eco, comfort), system settings (hub firmware, automatic firmware updates, restarting the hub, cloud and
   Wi-Fi details, changing the heat source and boiler type, OpenTherm hot water and
   heating water temperatures, hot water channel, legacy PowerTag energy mode, brand, OpenTherm, valve
