@@ -14,84 +14,136 @@ account involved*.
 
 <sub>Screenshots show example data, not a real home.</sub>
 
-The app has four tabs, plus a settings page behind the gear icon:
+## Why this app?
 
-- **Home:** whether the boiler or heat source is being called for heat, away mode, boost all
-  rooms and cancel overrides; your favourite rooms and hot water with their
-  controls (choose and order them with Edit); and your Moments, one tap to run.
-  On hubs that support it, the app keeps a live connection to the hub while it is
-  open, so changes made elsewhere (the official app, a thermostat) show within a
-  second or two; the status line then says "live".
-- **Automations:** Moments (create, edit, rename, delete and run; each action sets a
-  room's temperature, boosts it for a time or sends it back to its schedule, or turns
-  the hot water on, off, on for a time or back to its schedule; on hubs with
-  them, a light on, off or dimmed, a smart plug on or off, a shutter lifted or
-  tilted to a position, a cooling room's mode or on/off, or a room's heating
-  level in percent, an EV charger started, paused or switched, a fan's speed or a
-  PowerTag C output; waits and notifications added in the official app are
-  kept), Schedules
-  (a weekly editor for each heating schedule and for hot water, with copy and
-  paste as text, like "Monday: 06:00 19.0, 08:00 17.5, 22:00 Off"; add, rename,
-  copy and delete heating schedules), and automations (create and edit them:
-  away mode or hot water conditions, times including sunrise and sunset, and
-  notifications, waits, Moments, room and hot water actions; on/off, delete).
-  Moments and automations show their icon, and you can choose it when editing.
-- **Control:** every room and the hot water with full controls: target
-  temperature, boost, hold a temperature for a set time, mode (schedule,
-  manual, off), advance to the next scheduled setting, the next scheduled
-  change, humidity and window state. One tab per room also lists its devices.
-- **Insights:** from your Wiser account: energy saved this month and the
-  monthly trend, hours saved by away and eco mode, heating hours over the last
-  30 days against the outdoor minimum and maximum, activity counts, and the heat report: room temperatures,
-  set points and outdoor temperature by day, week or month, drawn in the app.
-  Tap or drag on the chart for the values at a time, and tap a name to hide it.
-- **Settings:** hub connection (scan the QR code on the hub to get its secret,
-  and automatic hub discovery), rooms (each
-  with its device count; a room page to rename it, choose or edit its schedule,
-  switch open window detection, set its heating type and occupancy settings,
-  choose its heating channel on hubs with more than one, see
-  its devices and delete it), devices (a page each with its name, battery,
-  signal and readings, its room, button lock, radiator valve battery type,
-  firmware, identify and delete; add a new device, with an install code if it
-  has one, scanned from its QR code as the official app does for newer radiator
-  valves and other devices, or stop adding devices), away mode (away temperature, whether hot water turns off too),
-  smart modes (eco, comfort), system settings (hub firmware, automatic firmware updates, restarting the hub, cloud and
-  Wi-Fi details, changing the heat source and boiler type, OpenTherm hot water and
-  heating water temperatures, hot water channel, legacy PowerTag energy mode, brand, OpenTherm, valve
-  protection, hub clock, Zigbee network details, boiler readings and burner and pump statistics over OpenTherm), home screen
-  favourites, and light or dark theme.
-- **Equipment** (only on hubs that have any): lights, shutters, smart plugs,
-  smoke alarms, EV chargers, PowerTag energy meters and outputs, appliances,
-  underfloor heating, heating actuators, fans, motion/door/window and light
-  sensors, heat pumps and thermostat displays. Each gets a page with its
-  readings and the official app's controls and settings (for example a light's
-  brightness, mode, away action and power-on behaviour; a shutter's position and
-  tilt; a heating actuator's output, cycle time and floor sensor limits), its
-  name, its room and, for lights, shutters, fans, plugs and chargers, its
-  schedule. Also: a light's dimming range, a shutter's motor timings and slat
-  angles, a PowerTag's installation type and grid limit, high- and low-power
-  alarms on appliances, what each button on a button panel does (any action a
-  Moment can do), and Zigbee groups of lights and shutters (create, add or
-  remove devices, rename, delete). Light, shutter and fan schedules ("Level" schedules, in percent)
-  can be edited. System settings adds summer comfort, seasonal comfort, cooling
-  and underfloor settings, the dynamic energy tariff (price now, today's
-  average, cheapest and dearest times) and Matter pairing where the hub
-  supports them, and
-  room pages add summer comfort, cooling, heat pump mode and floor sensor
-  settings. All of this follows the official app's requests but has only been
-  tested against a simulated hub.
-- **Home screen widget:** current and target temperature for one room.
-- **Quick settings tiles:** hot water boost, and away mode.
-- **App icon shortcuts:** long-press the app icon for away mode on/off, hot water
-  boost, boost all rooms and your Moments. They run without opening the app and
-  confirm with a short message; each can be dragged onto the home screen. Only
-  what your hub supports is offered, and launchers show the first four or five.
+Wiser makes some great products and hardware, but the official app is missing Android features. It's laggy and uses a webview for insights as it's made with .net. This app is native kotlin so it's fast and adds Android features like app icon shortcuts, quick tile shortcuts, home screen and lock screen widgets. Most importantly it's open source and tracks or logs zero activity.
 
 It only works while the phone can reach the hub, so on your home Wi-Fi or over a
 VPN into your home network*.
 
 Not affiliated with or endorsed by Drayton or Schneider Electric. The local API
 is undocumented and could change with a firmware update.
+
+## What it does
+
+Four tabs, plus a settings page behind the gear icon.
+
+### Home
+
+- Whether the boiler or heat source is being called for heat
+- Away mode, boost all rooms and cancel overrides
+- Your favourite rooms and hot water with their controls (choose and order them with **Edit**)
+- Your Moments, one tap to run
+- Live updates on hubs that support them: changes made elsewhere (the official
+  app, a thermostat) show within a second or two, and the status line says "live"
+
+### Automations
+
+**Moments:** create, edit, rename, delete and run. Each action can:
+
+- set a room's temperature, boost it for a time or send it back to its schedule
+- turn the hot water on, off, on for a time or back to its schedule
+- on hubs with them: switch or dim a light, switch a smart plug, lift or tilt a
+  shutter, set a cooling room's mode or turn it on or off, set a room's heating
+  level in percent, start, pause or switch an EV charger, set a fan's speed or a
+  PowerTag C output
+
+Waits and notifications added in the official app are kept.
+
+**Schedules:**
+
+- A weekly editor for each heating schedule and for hot water
+- Copy and paste as text, like `Monday: 06:00 19.0, 08:00 17.5, 22:00 Off`
+- Add, rename, copy and delete heating schedules
+
+**Automations:**
+
+- Create and edit them, switch them on or off, and delete them
+- Conditions: away mode, hot water, and times including sunrise and sunset
+- Actions: notifications, waits, Moments, rooms and hot water
+
+Moments and automations show their icon, and you can choose it when editing.
+
+### Control
+
+Every room and the hot water, with:
+
+- Target temperature, boost, and hold a temperature for a set time
+- Mode (schedule, manual, off) and advance to the next scheduled setting
+- The next scheduled change, humidity and window state
+- One tab per room, which also lists its devices
+
+### Insights
+
+From your Wiser account:
+
+- Energy saved this month and the monthly trend
+- Hours saved by away and eco mode, and activity counts
+- Heating hours over the last 30 days against the outdoor minimum and maximum
+- The heat report: room temperatures, set points and outdoor temperature by
+  day, week or month, drawn in the app. Tap or drag on the chart for the values
+  at a time, and tap a name to hide it.
+
+### Settings
+
+- **Hub connection:** scan the QR code on the hub to get its secret, and
+  automatic hub discovery
+- **Rooms:** each with its device count. A room's page renames it, chooses or
+  edits its schedule, switches open window detection, sets its heating type,
+  occupancy settings and heating channel (on hubs with more than one), lists its
+  devices and deletes it.
+- **Devices:** a page each with its name, battery, signal and readings, room,
+  button lock, radiator valve battery type, firmware, identify and delete. Add a
+  new device, with an install code if it has one, scanned from its QR code as
+  the official app does for newer radiator valves and other devices.
+- **Away mode:** away temperature, and whether hot water turns off too
+- **Smart modes:** eco and comfort
+- **System:**
+  - hub firmware, automatic firmware updates, restarting the hub, cloud and
+    Wi-Fi details, hub clock
+  - heat source and boiler type, hot water channel, brand, valve protection
+  - OpenTherm: hot water and heating water temperatures, boiler readings, and
+    burner and pump statistics
+  - legacy PowerTag energy mode and Zigbee network details
+- Home screen favourites, and light or dark theme
+
+### Equipment
+
+Only on hubs that have any. Covers lights, shutters, smart plugs, smoke alarms,
+EV chargers, PowerTag energy meters and outputs, appliances, underfloor heating,
+heating actuators, fans, motion, door, window and light sensors, heat pumps and
+thermostat displays.
+
+- Each gets a page with its readings and the official app's controls and
+  settings, for example:
+  - a light's brightness, mode, away action, power-on behaviour and dimming range
+  - a shutter's position, tilt, motor timings and slat angles
+  - a heating actuator's output, cycle time and floor sensor limits
+  - a PowerTag's installation type and grid limit
+  - high- and low-power alarms on appliances
+- Its name and room, and a schedule for lights, shutters, fans, plugs and
+  chargers. Light, shutter and fan schedules ("Level" schedules, in percent) can
+  be edited.
+- What each button on a button panel does (any action a Moment can do)
+- Zigbee groups of lights and shutters: create, add or remove devices, rename,
+  delete
+- Where the hub supports them, System settings adds summer comfort, seasonal
+  comfort, cooling and underfloor settings, the dynamic energy tariff (price
+  now, today's average, cheapest and dearest times) and Matter pairing. Room
+  pages add summer comfort, cooling, heat pump mode and floor sensor settings.
+
+All of this follows the official app's requests but has only been tested
+against a simulated hub.
+
+### Outside the app
+
+- **Home screen widget:** current and target temperature for one room
+- **Quick settings tiles:** hot water boost, and away mode
+- **App icon shortcuts:** long-press the app icon for away mode on/off, hot water
+  boost, boost all rooms and your Moments. They run without opening the app and
+  confirm with a short message, and each can be dragged onto the home screen.
+  Only what your hub supports is offered, and launchers show the first four or
+  five.
 
 ## Setup
 
