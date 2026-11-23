@@ -229,6 +229,9 @@ private fun ActionCard(action: MomentAction, state: HubState, onClick: () -> Uni
         "Light" -> "Light"
         "SmartPlug" -> "Smart plug"
         "Shutter" -> "Shutter"
+        "EVSE" -> "EV charger"
+        "FanController" -> "Fan"
+        "PTC" -> "PowerTag C"
         else -> null
     }
     val (target, value) = describeAction(action, state)
@@ -275,7 +278,8 @@ fun pickMomentAction(dialogs: DialogHost, state: HubState, current: MomentAction
     val waterCount = if (state.hotWater != null) 1 else 0
     val targets = state.rooms.map { "Heating · ${it.name}" } + listOfNotNull(state.hotWater?.let { "Hot water" }) +
         state.lights.map { "Light · ${it.name}" } + state.plugs.map { "Smart plug · ${it.name}" } +
-        state.shutters.map { "Shutter · ${it.name}" }
+        state.shutters.map { "Shutter · ${it.name}" } + state.evChargers.map { "EV charger · ${it.name}" } +
+        state.fans.map { "Fan · ${it.name}" } + state.powerTagCs.map { "PowerTag C · ${it.name}" }
     val percents = (0..100 step 10).toList()
     dialogs.choice("What should it change?", targets) { index ->
         // Lights, plugs and shutters come after the rooms and the hot water.
@@ -303,6 +307,33 @@ fun pickMomentAction(dialogs: DialogHost, state: HubState, current: MomentAction
                 if (shutter.extra) dialogs.choice(shutter.name, listOf("Lift to a position", "Tilt to an angle")) { pick ->
                     pickLevel(if (pick == 0) "LiftTo" else "TiltTo")
                 } else pickLevel("LiftTo")
+                return@choice
+            }
+            i -= state.shutters.size
+            state.evChargers.getOrNull(i)?.let { ev ->
+                // The official app has both: switching the charger's output, and starting or pausing a charge.
+                val options = listOf("Switch on", "Switch off", "Start charging", "Pause charging")
+                dialogs.choice(ev.name, options) { pick ->
+                    onPicked(
+                        when (pick) {
+                            0, 1 -> MomentAction("EVSE", ev.id, if (pick == 0) 1 else 0, null, MomentAction.TYPE_EV_OUTPUT)
+                            else -> MomentAction("EVSE", ev.id, 0, null, MomentAction.TYPE_EV_ACTION, if (pick == 2) "Start" else "Pause")
+                        },
+                    )
+                }
+                return@choice
+            }
+            i -= state.evChargers.size
+            state.fans.getOrNull(i)?.let { fan ->
+                val speeds = listOf("Off", "Low", "Medium", "High")
+                dialogs.choice(fan.name, speeds) { pick -> onPicked(MomentAction("FanController", fan.id, 0, null, MomentAction.TYPE_FAN, speeds[pick])) }
+                return@choice
+            }
+            i -= state.fans.size
+            state.powerTagCs.getOrNull(i)?.let { ptc ->
+                dialogs.choice(ptc.name, listOf("On", "Off")) { pick ->
+                    onPicked(MomentAction("PTC", ptc.id, if (pick == 0) 1 else 0, null, MomentAction.TYPE_PTC))
+                }
             }
             return@choice
         }

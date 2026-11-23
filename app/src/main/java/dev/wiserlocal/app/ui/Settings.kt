@@ -1,5 +1,7 @@
 package dev.wiserlocal.app.ui
 
+import org.json.JSONObject
+
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.os.Handler
@@ -67,6 +69,12 @@ fun SettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                 InfoRow("Rooms", "Names, schedules, window detection and devices", showChevron = true) { nav.push(Screen.Rooms) }
                 RowDivider()
                 InfoRow("Devices", "Thermostats and valves: battery, signal, lock, identify", showChevron = true) { nav.push(Screen.Devices) }
+                // Lights, shutters, plugs, sensors and so on, only on hubs that have any.
+                val domain = vm.state?.domain
+                if (dev.wiserlocal.app.Equipment.SPECS.any { dev.wiserlocal.app.Equipment.items(domain, it).isNotEmpty() }) {
+                    RowDivider()
+                    InfoRow("Equipment", "Lights, shutters, plugs, sensors, energy and more", showChevron = true) { nav.push(Screen.Equipment) }
+                }
             }
             Section {
                 if (vm.state?.features?.awayMode != false) {
@@ -452,6 +460,13 @@ fun RoomDetailsScreen(vm: HubViewModel, snackbar: SnackbarHostState, roomId: Int
                 }
             }
 
+            val roomJson = (0 until (state.domain?.optJSONArray("Room")?.length() ?: 0))
+                .mapNotNull { state.domain?.optJSONArray("Room")?.optJSONObject(it) }
+                .firstOrNull { it.optInt("id") == room.id }
+            if (hasControls(roomJson, dev.wiserlocal.app.Equipment.ROOM)) Section("Comfort and cooling") {
+                ControlRows(vm, roomJson!!, room.id, dev.wiserlocal.app.Equipment.ROOM)
+            }
+
             room.occupancy?.let { occ ->
                 Section("Occupancy") {
                     val offsets = (0..10).toList()
@@ -816,6 +831,18 @@ fun SystemSettingsScreen(vm: HubViewModel, snackbar: SnackbarHostState) {
                         onClick = row.onClick,
                     )
                 }
+            }
+            val sysJson = state.domain?.optJSONObject("System")
+            if (hasControls(sysJson, dev.wiserlocal.app.Equipment.SYSTEM)) Section("Comfort, cooling and underfloor") {
+                ControlRows(vm, sysJson!!, 0, dev.wiserlocal.app.Equipment.SYSTEM)
+            }
+            state.seasonalComfort?.let { sc ->
+                if (hasControls(sc, dev.wiserlocal.app.Equipment.SEASONAL)) Section("Seasonal comfort") {
+                    ControlRows(vm, sc, 0, dev.wiserlocal.app.Equipment.SEASONAL)
+                }
+            }
+            if (state.features.flags["MatterBridge"] == true) Section("Matter") {
+                ControlRows(vm, JSONObject(), 0, dev.wiserlocal.app.Equipment.MATTER)
             }
             if (system.zigbee.isNotEmpty()) Section("Zigbee network") {
                 system.zigbee.forEachIndexed { i, (label, value) ->

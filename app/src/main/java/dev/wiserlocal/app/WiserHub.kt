@@ -199,6 +199,14 @@ data class MomentAction(
         const val TYPE_PLUG = "Plug"
         /** A shutter: [text] LiftTo or TiltTo, [setPoint] percent. */
         const val TYPE_SHUTTER = "Shutter"
+        /** An EV charger or socket switched on/off ([setPoint] 1/0): OverrideRequest {"Output"}. */
+        const val TYPE_EV_OUTPUT = "EvOutput"
+        /** An EV charger's charging started or paused ([text] Start/Pause): RequestAction. */
+        const val TYPE_EV_ACTION = "EvAction"
+        /** A fan at [text] speed (Off, Low, Medium, High). */
+        const val TYPE_FAN = "Fan"
+        /** A PowerTag C output switched on/off ([setPoint] 1/0). */
+        const val TYPE_PTC = "PowerTagC"
     }
 }
 
@@ -218,8 +226,15 @@ data class HubState(
     val lights: List<SimpleDevice> = emptyList(),
     val plugs: List<SimpleDevice> = emptyList(),
     val shutters: List<SimpleDevice> = emptyList(),
+    val evChargers: List<SimpleDevice> = emptyList(),
+    val fans: List<SimpleDevice> = emptyList(),
+    val powerTagCs: List<SimpleDevice> = emptyList(),
     /** The hub's heating channels (relays), with the rooms each one heats. */
     val heatingChannels: List<HeatingChannel> = emptyList(),
+    /** The hub's whole domain data, for the generic equipment pages ([Equipment]). */
+    val domain: org.json.JSONObject? = null,
+    /** Seasonal comfort settings (/data/v2/seasonalComfort/), on hubs that have it. */
+    val seasonalComfort: org.json.JSONObject? = null,
 )
 
 /** A light, smart plug or shutter: [extra] is "dims" for a dimmable light, "tilts" for a tilting shutter. */
@@ -243,6 +258,10 @@ data class Schedule(
     val days: Map<String, List<Slot>>,
     /** How the hub sent on/off days, so they are sent back in the same shape. */
     val onOffWrapped: Boolean = false,
+    /** A "Level" schedule (lights, shutters, fans): slot values are percentages. */
+    val level: Boolean = false,
+    /** For level schedules: Lighting, Shutters or Fan3Speed. */
+    val levelType: String? = null,
     /** Value of the next scheduled change (same units as [Slot.value]), if known. */
     val nextValue: Int? = null,
     /** What the schedule asks for right now (heating: tenths of a degree), if the hub says. */
@@ -435,11 +454,11 @@ class WiserHub(
             automations += Automation(id, name, o.optInt("IconId", 0), o.optBoolean("Enabled", true), o.optBoolean("EnableNotification", false))
         }
 
-        fun simple(key: String, extraKey: String?): List<SimpleDevice> {
+        fun simple(key: String, extraKey: String?, label: String = key): List<SimpleDevice> {
             val out = mutableListOf<SimpleDevice>()
             json.optJSONArray(key).forEachObject { o ->
                 val id = o.optInt("id")
-                out += SimpleDevice(id, o.optStringOrNull("Name") ?: "$key $id", extraKey?.let { o.optBoolean(it, false) } ?: false)
+                out += SimpleDevice(id, o.optStringOrNull("Name") ?: "$label $id", extraKey?.let { o.optBoolean(it, false) } ?: false)
             }
             return out
         }
@@ -455,10 +474,17 @@ class WiserHub(
         }
         return HubState(
             rooms, hotWater, system, devices, moments, automations, HubFeatures.parse(json),
-            lights = simple("Light", "IsDimmable"),
-            plugs = simple("SmartPlug", null),
+            lights = simple("Light", "IsDimmable", "Light"),
+            plugs = simple("SmartPlug", null, "Smart plug"),
             shutters = simple("Shutter", "IsTiltSupported"),
+            evChargers = simple("EVSE", null, "EV charger"),
+            fans = simple("FanController", null, "Fan"),
+            powerTagCs = simple("PTC", null, "PowerTag C"),
             heatingChannels = channels,
+            domain = json,
+            seasonalComfort = if (json.optJSONObject("FeatureCapability")?.optBoolean("SeasonalComfortAvailable") == true) {
+                runCatching { attempt("GET", "/data/v2/seasonalComfort/", null)?.let { JSONObject(it) } }.getOrNull()
+            } else null,
         )
     }
 
@@ -690,6 +716,15 @@ class WiserHub(
     fun identifyDevice(deviceId: Int, on: Boolean) = patch("Device/$deviceId", """{"Identify":$on}""")
 
     /** The hub's Wi-Fi details as (label, value) pairs; empty if it does not report them. */
+    /** Sends one of the [Equipment] requests: paths under /data/v2/domain/, or /data/v2 when they start with "/". */
+    fun send(req: Req) {
+        if (req.path.startsWith("/")) {
+            attempt(req.method, "/data/v2${req.path}", req.body) ?: throw IOException("Hub returned HTTP 404 for ${req.path}")
+        } else {
+            request(req.method, req.path, req.body)
+        }
+    }
+
     /** The hub's Wi-Fi MAC address, which also names it in Wiser's cloud. */
     fun fetchMacAddress(): String? {
         val text = attempt("GET", "/data/v2/network/", null) ?: return null
@@ -763,6 +798,18 @@ class WiserHub(
         when (json.optString("Domain") to json.optString("Action")) {
             "Room" to "HVACMode" -> return MomentAction("Room", id, 0, null, MomentAction.TYPE_HVAC, raw)
             "Room" to "ClimateOnOff" -> return MomentAction("Room", id, 0, null, MomentAction.TYPE_CLIMATE, raw)
+            "EVSE" to "OverrideRequest", "PTC" to "OverrideRequest" -> {
+                val v = raw.takeIf { it.startsWith("{") }?.let { JSONObject(it) } ?: return null
+                val on = if (v.optString("Output").equals("On", true)) 1 else 0
+                val type = if (json.optString("Domain") == "EVSE") MomentAction.TYPE_EV_OUTPUT else MomentAction.TYPE_PTC
+                return MomentAction(json.optString("Domain"), id, on, null, type)
+            }
+            "EVSE" to "RequestAction" -> return MomentAction("EVSE", id, 0, null, MomentAction.TYPE_EV_ACTION, raw)
+            "FanController" to "RequestOverride" -> {
+                val v = raw.takeIf { it.startsWith("{") }?.let { JSONObject(it) } ?: return null
+                val speed = if (v.optString("state").equals("Off", true)) "Off" else v.optString("speed").ifEmpty { "Medium" }
+                return MomentAction("FanController", id, 0, null, MomentAction.TYPE_FAN, speed)
+            }
             "SmartPlug" to "RequestOutput" ->
                 return MomentAction("SmartPlug", id, if (raw.equals("On", true)) 1 else 0, null, MomentAction.TYPE_PLUG)
             "Light" to "RequestOverride" -> {
@@ -862,6 +909,14 @@ class WiserHub(
             }.toString()
             MomentAction.TYPE_SHUTTER -> "RequestAction" to JSONObject()
                 .put("action", action.text ?: "LiftTo").put("percentage", action.setPoint.coerceIn(0, 100)).toString()
+            MomentAction.TYPE_EV_OUTPUT, MomentAction.TYPE_PTC ->
+                "OverrideRequest" to JSONObject().put("Output", if (action.setPoint != 0) "On" else "Off").toString()
+            MomentAction.TYPE_EV_ACTION -> "RequestAction" to (action.text ?: "Start")
+            MomentAction.TYPE_FAN -> "RequestOverride" to JSONObject().also { o ->
+                val speed = action.text ?: "Off"
+                o.put("state", if (speed == "Off") "Off" else "On")
+                if (speed != "Off") o.put("speed", speed)
+            }.toString()
             MomentAction.TYPE_PERCENT -> "RequestOverride" to JSONObject()
                 .put("type", "Manual").put("percentageDemand", action.setPoint.coerceIn(0, 100)).toString()
             else -> null
@@ -1030,6 +1085,28 @@ class WiserHub(
             ?: throw IOException("This hub's firmware does not offer schedules over the local API")
         val json = JSONObject(text)
         val schedules = mutableListOf<Schedule>()
+        // Level schedules (lights, shutters, fans): {"Time": [630, 2200], "Level": [100, 0]}.
+        json.optJSONArray("Level").forEachObject { o ->
+            val days = DAYS.associateWith { day ->
+                val d = o.optJSONObject(day)
+                val times = d?.optJSONArray("Time")
+                val levels = d?.optJSONArray("Level")
+                val slots = mutableListOf<Slot>()
+                if (times != null && levels != null) {
+                    for (j in 0 until minOf(times.length(), levels.length())) slots += Slot(fromHhmm(times.getInt(j)), levels.getInt(j))
+                }
+                slots.sortedBy { it.minutes }
+            }
+            schedules += Schedule(
+                id = o.getInt("id"),
+                name = o.optString("Name"),
+                heating = false,
+                days = days,
+                level = true,
+                levelType = o.optStringOrNull("Type"),
+                currentValue = if (o.has("CurrentLevel")) o.optInt("CurrentLevel") else null,
+            )
+        }
         for ((key, heating) in listOf("Heating" to true, "OnOff" to false)) {
             json.optJSONArray(key).forEachObject { o ->
                 var wrapped = false
@@ -1093,7 +1170,14 @@ class WiserHub(
         val body = JSONObject()
         for (day in DAYS) {
             val slots = schedule.days[day].orEmpty().sortedBy { it.minutes }
-            if (schedule.heating) {
+            if (schedule.level) {
+                body.put(
+                    day,
+                    JSONObject()
+                        .put("Time", JSONArray(slots.map { toHhmm(it.minutes) }))
+                        .put("Level", JSONArray(slots.map { it.value })),
+                )
+            } else if (schedule.heating) {
                 body.put(
                     day,
                     JSONObject()
@@ -1112,7 +1196,7 @@ class WiserHub(
                 body.put(day, if (schedule.onOffWrapped) JSONObject().put("Time", times) else times)
             }
         }
-        val type = if (schedule.heating) "Heating" else "OnOff"
+        val type = if (schedule.level) "Level" else if (schedule.heating) "Heating" else "OnOff"
         attempt("PATCH", "$SCHEDULES_PATH$type/${schedule.id}", body.toString())
             ?: throw IOException("The hub did not recognise that schedule")
     }
@@ -1149,7 +1233,7 @@ class WiserHub(
     }
 
     private fun schedulePath(schedule: Schedule) =
-        "$SCHEDULES_PATH${if (schedule.heating) "Heating" else "OnOff"}/${schedule.id}"
+        "$SCHEDULES_PATH${if (schedule.level) "Level" else if (schedule.heating) "Heating" else "OnOff"}/${schedule.id}"
 
     private fun patch(path: String, body: String) {
         request("PATCH", path, body)

@@ -12,12 +12,13 @@ import java.util.Locale
  */
 object ScheduleText {
 
-    fun format(days: Map<String, List<Slot>>, heating: Boolean): String =
+    fun format(days: Map<String, List<Slot>>, heating: Boolean, level: Boolean = false): String =
         WiserHub.DAYS.joinToString("\n") { day ->
             val slots = days[day].orEmpty().sortedBy { it.minutes }
             "$day: " + slots.joinToString(", ") { s ->
                 val time = "%02d:%02d".format(Locale.ROOT, s.minutes / 60, s.minutes % 60)
                 val value = when {
+                    level -> "${s.value}%"
                     !heating -> if (s.value != 0) "On" else "Off"
                     s.value <= WiserHub.SCHEDULE_OFF -> "Off"
                     else -> String.format(Locale.ROOT, "%.1f", s.value / 10.0)
@@ -27,7 +28,7 @@ object ScheduleText {
         }
 
     /** The days found in [text], or a message saying what is wrong with it. */
-    fun parse(text: String, heating: Boolean, maxPerDay: Int): Result<Map<String, List<Slot>>> = runCatching {
+    fun parse(text: String, heating: Boolean, maxPerDay: Int, level: Boolean = false): Result<Map<String, List<Slot>>> = runCatching {
         val out = linkedMapOf<String, List<Slot>>()
         text.lines().map { it.trim() }.filter { it.isNotEmpty() }.forEach { line ->
             val colon = line.indexOf(':')
@@ -46,6 +47,11 @@ object ScheduleText {
                 require(h in 0..23 && m in 0..59) { "$day: “${parts[0]}” isn't a time like 06:00" }
                 val word = parts[1].removeSuffix("°").removeSuffix("C").removeSuffix("°")
                 val value = when {
+                    level -> {
+                        val n = parts[1].removeSuffix("%").toIntOrNull() ?: if (word.equals("off", true)) 0 else if (word.equals("on", true)) 100 else null
+                        require(n != null && n in 0..100) { "$day: “${parts[1]}” isn't a level from 0 to 100%" }
+                        n
+                    }
                     word.equals("off", ignoreCase = true) -> if (heating) WiserHub.SCHEDULE_OFF else 0
                     word.equals("on", ignoreCase = true) && !heating -> 1
                     heating -> {

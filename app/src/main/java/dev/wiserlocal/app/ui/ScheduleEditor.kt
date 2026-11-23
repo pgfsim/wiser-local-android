@@ -65,7 +65,7 @@ fun ScheduleEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, screen: 
     val nav = LocalNav.current
     val dialogs = LocalDialogs.current
     val context = LocalContext.current
-    val schedule = vm.schedules.firstOrNull { it.id == screen.id && it.heating == screen.heating }
+    val schedule = vm.schedules.firstOrNull { it.id == screen.id && it.heating == screen.heating && it.level == screen.level }
 
     /** Working copy of the days; filled once from the hub's copy. */
     val days = remember { mutableStateMapOf<String, List<Slot>>() }
@@ -110,7 +110,7 @@ fun ScheduleEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, screen: 
     fun addSlot() {
         val suggested = slots.maxOfOrNull { it.minutes }?.let { minOf(it + 60, 23 * 60) } ?: (6 * 60)
         pickTime(suggested) { minutes ->
-            val value = if (screen.heating) slots.lastOrNull()?.value?.takeIf { it > 0 } ?: 200 else 1
+            val value = if (screen.level) 100 else if (screen.heating) slots.lastOrNull()?.value?.takeIf { it > 0 } ?: 200 else 1
             replace(null, Slot(minutes, value))
         }
     }
@@ -136,14 +136,14 @@ fun ScheduleEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, screen: 
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(text = { Text("Copy as text") }, onClick = {
                     menu = false
-                    val text = dev.wiserlocal.app.ScheduleText.format(days, screen.heating)
+                    val text = dev.wiserlocal.app.ScheduleText.format(days, screen.heating, screen.level)
                     clipboard.setPrimaryClip(android.content.ClipData.newPlainText(screen.title, text))
                     vm.message = "Schedule copied as text"
                 })
                 DropdownMenuItem(text = { Text("Paste from text") }, onClick = {
                     menu = false
                     val text = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
-                    dev.wiserlocal.app.ScheduleText.parse(text, screen.heating, MAX_SLOTS_PER_DAY)
+                    dev.wiserlocal.app.ScheduleText.parse(text, screen.heating, MAX_SLOTS_PER_DAY, screen.level)
                         .onSuccess { parsed ->
                             val which = if (parsed.size == 7) "the whole week" else parsed.keys.joinToString(", ")
                             dialogs.confirm("Replace $which with the copied schedule? Nothing is sent until you tap Save.", "Replace") {
@@ -203,6 +203,7 @@ fun ScheduleEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, screen: 
                     !loaded -> "Loading…"
                     dirty -> "Unsaved changes. Tap Save to send them to the hub."
                     slots.isEmpty() -> "No changes on $day. Tap Add change."
+                    screen.level -> "Each change sets the level (brightness or position) from that time until the next change."
                     screen.heating -> "Each change sets the target temperature from that time until the next change."
                     else -> "Each change turns hot water on or off from that time until the next change."
                 }
@@ -212,11 +213,19 @@ fun ScheduleEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, screen: 
                     SlotCard(
                         time = context.clockText(slot.minutes),
                         heating = screen.heating,
+                        level = screen.level,
                         value = slot.value,
                         onTime = { pickTime(slot.minutes) { replace(slot, slot.copy(minutes = it)) } },
                         onTemp = {
-                            dialogs.temperature("Target temperature", slot.value, allowOff = true) {
-                                replace(slot, slot.copy(value = it))
+                            if (screen.level) {
+                                val levels = (0..100 step 10).toList()
+                                dialogs.choice("Level", levels.map { "$it%" }, levels.indexOf(slot.value).takeIf { it >= 0 }) { pick ->
+                                    replace(slot, slot.copy(value = levels[pick]))
+                                }
+                            } else {
+                                dialogs.temperature("Target temperature", slot.value, allowOff = true) {
+                                    replace(slot, slot.copy(value = it))
+                                }
                             }
                         },
                         onToggle = { on -> replace(slot, slot.copy(value = if (on) 1 else 0)) },
@@ -265,6 +274,7 @@ fun ScheduleEditorScreen(vm: HubViewModel, snackbar: SnackbarHostState, screen: 
 private fun SlotCard(
     time: String,
     heating: Boolean,
+    level: Boolean,
     value: Int,
     onTime: () -> Unit,
     onTemp: () -> Unit,
@@ -288,7 +298,9 @@ private fun SlotCard(
                 Text(time, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium)
             }
             Spacer(Modifier.weight(1f))
-            if (heating) {
+            if (level) {
+                TextButton(onClick = onTemp) { Text("$value%", style = MaterialTheme.typography.titleLarge) }
+            } else if (heating) {
                 TextButton(onClick = onTemp) {
                     Icon(flameIcon(), contentDescription = null, tint = if (active) accents.heat else MaterialTheme.colorScheme.outline, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(6.dp))

@@ -147,13 +147,30 @@ fun AutomationsTab(vm: HubViewModel, modifier: Modifier) {
                     item(key = "s${schedule.id}") { HeatingScheduleCard(schedule, heating, state, vm) }
                 }
                 vm.schedules.filter { !it.heating }.forEach { schedule ->
+                    // On/off schedules are hot water unless a plug or other device uses them; level
+                    // schedules belong to lights, shutters or fans.
+                    val water = !schedule.level && (state?.hotWater?.scheduleId == schedule.id || schedule.name.equals("Hot Water", true))
+                    val title = when {
+                        water -> "Hot water"
+                        schedule.level -> schedule.name.ifEmpty { "${schedule.levelType ?: "Level"} schedule" }
+                        else -> schedule.name.ifEmpty { "On/off schedule" }
+                    }
                     item(key = "w${schedule.id}") {
                         ListCard(
-                            icon = waterIcon(),
-                            title = "Hot water",
-                            detail = schedule.name.takeIf { it.isNotEmpty() && it != "Hot Water" },
+                            icon = if (water) waterIcon() else painterResource(R.drawable.ic_automation),
+                            title = title,
+                            detail = when {
+                                water -> schedule.name.takeIf { it.isNotEmpty() && it != "Hot Water" }
+                                schedule.level -> when (schedule.levelType) {
+                                    "Lighting" -> "Lights"
+                                    "Shutters" -> "Shutters"
+                                    "Fan3Speed" -> "Fans"
+                                    else -> "Levels"
+                                }
+                                else -> "On/off"
+                            },
                             onClick = {
-                                nav.push(Screen.ScheduleEditor(schedule.id, heating = false, title = "Hot water schedule"))
+                                nav.push(Screen.ScheduleEditor(schedule.id, heating = false, title = if (water) "Hot water schedule" else title, level = schedule.level))
                             },
                         )
                     }
@@ -244,6 +261,14 @@ fun describeAction(action: MomentAction, state: HubState): Pair<String, String> 
             else -> "${action.setPoint}%"
         }
         MomentAction.TYPE_PLUG -> return (state.plugs.firstOrNull { it.id == action.id }?.name ?: "Plug ${action.id}") to
+            (if (action.setPoint != 0) "On" else "Off")
+        MomentAction.TYPE_EV_OUTPUT -> return (state.evChargers.firstOrNull { it.id == action.id }?.name ?: "EV charger ${action.id}") to
+            (if (action.setPoint != 0) "On" else "Off")
+        MomentAction.TYPE_EV_ACTION -> return (state.evChargers.firstOrNull { it.id == action.id }?.name ?: "EV charger ${action.id}") to
+            (if (action.text == "Pause") "Pause charging" else "Start charging")
+        MomentAction.TYPE_FAN -> return (state.fans.firstOrNull { it.id == action.id }?.name ?: "Fan ${action.id}") to
+            (if (action.text == "Off" || action.text == null) "Off" else "${action.text} speed")
+        MomentAction.TYPE_PTC -> return (state.powerTagCs.firstOrNull { it.id == action.id }?.name ?: "PowerTag C ${action.id}") to
             (if (action.setPoint != 0) "On" else "Off")
         MomentAction.TYPE_SHUTTER -> return (state.shutters.firstOrNull { it.id == action.id }?.name ?: "Shutter ${action.id}") to
             "${if (action.text == "TiltTo") "Tilt" else "Lift"} to ${action.setPoint}%"

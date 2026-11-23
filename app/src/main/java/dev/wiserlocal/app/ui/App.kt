@@ -46,7 +46,9 @@ sealed interface Screen {
     data object Theme : Screen
     data class MomentEditor(val momentId: Int?) : Screen
     data class AutomationEditor(val automationId: Int?) : Screen
-    data class ScheduleEditor(val id: Int, val heating: Boolean, val title: String) : Screen
+    data class ScheduleEditor(val id: Int, val heating: Boolean, val title: String, val level: Boolean = false) : Screen
+    data object Equipment : Screen
+    data class EquipmentItem(val domain: String, val id: Int) : Screen
 }
 
 class Navigator {
@@ -111,6 +113,8 @@ fun WiserApp(vm: HubViewModel) {
             is Screen.MomentEditor -> MomentEditorScreen(vm, snackbar, screen.momentId)
             is Screen.AutomationEditor -> AutomationEditorScreen(vm, snackbar, screen.automationId)
             is Screen.ScheduleEditor -> ScheduleEditorScreen(vm, snackbar, screen)
+            Screen.Equipment -> EquipmentScreen(vm, snackbar)
+            is Screen.EquipmentItem -> EquipmentItemScreen(vm, snackbar, screen.domain, screen.id)
         }
 
         dialogs.content?.invoke()

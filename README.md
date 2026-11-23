@@ -17,7 +17,8 @@ The app has four tabs, plus a settings page behind the gear icon:
   the hot water on, off, on for a time or back to its schedule; on hubs with
   them, a light on, off or dimmed, a smart plug on or off, a shutter lifted or
   tilted to a position, a cooling room's mode or on/off, or a room's heating
-  level in percent; waits and notifications added in the official app are
+  level in percent, an EV charger started, paused or switched, a fan's speed or a
+  PowerTag C output; waits and notifications added in the official app are
   kept), Schedules
   (a weekly editor for each heating schedule and for hot water, with copy and
   paste as text, like "Monday: 06:00 19.0, 08:00 17.5, 22:00 Off"; add, rename,
@@ -49,6 +50,20 @@ The app has four tabs, plus a settings page behind the gear icon:
   heating water temperatures, hot water channel, legacy PowerTag energy mode, brand, OpenTherm, valve
   protection, hub clock, Zigbee network details, boiler readings and burner and pump statistics over OpenTherm), home screen
   favourites, and light or dark theme.
+- **Equipment** (only on hubs that have any): lights, shutters, smart plugs,
+  smoke alarms, EV chargers, PowerTag energy meters and outputs, appliances,
+  underfloor heating, heating actuators, fans, motion/door/window and light
+  sensors, heat pumps and thermostat displays. Each gets a page with its
+  readings and the official app's controls and settings (for example a light's
+  brightness, mode, away action and power-on behaviour; a shutter's position and
+  tilt; a heating actuator's output, cycle time and floor sensor limits), its
+  name, its room and, for lights, shutters, fans, plugs and chargers, its
+  schedule. Light, shutter and fan schedules ("Level" schedules, in percent)
+  can be edited. System settings adds summer comfort, seasonal comfort, cooling
+  and underfloor settings and Matter pairing where the hub supports them, and
+  room pages add summer comfort, cooling, heat pump mode and floor sensor
+  settings. All of this follows the official app's requests but has only been
+  tested against a simulated hub.
 - **Home screen widget:** current and target temperature for one room.
 - **Quick settings tiles:** hot water boost, and away mode.
 - **App icon shortcuts:** long-press the app icon for away mode on/off, hot water
