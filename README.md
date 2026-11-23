@@ -2,11 +2,11 @@
 
 A small, unofficial Android app for Drayton Wiser heating hubs. It talks straight
 to the hub over your home network using the hub's local REST API, with no cloud
-account involved.
+account involved*.
 
 The app has four tabs, plus a settings page behind the gear icon:
 
-- **Home:** whether the boiler is being called for heat, away mode, boost all
+- **Home:** whether the boiler or heat source is being called for heat, away mode, boost all
   rooms and cancel overrides; your favourite rooms and hot water with their
   controls (choose and order them with Edit); and your Moments, one tap to run.
   On hubs that support it, the app keeps a live connection to the hub while it is
@@ -78,7 +78,7 @@ The app has four tabs, plus a settings page behind the gear icon:
   what your hub supports is offered, and launchers show the first four or five.
 
 It only works while the phone can reach the hub, so on your home Wi-Fi or over a
-VPN into your home network.
+VPN into your home network*.
 
 Not affiliated with or endorsed by Drayton or Schneider Electric. The local API
 is undocumented and could change with a firmware update.
@@ -116,43 +116,36 @@ Open the folder in Android Studio, or from a terminal with JDK 17 or newer:
 
 The APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
 
-## Releases
+How releases are built and signed is in [RELEASING.md](RELEASING.md).
 
-Releases are built and signed by GitHub Actions ([release.yml](.github/workflows/release.yml)) when a version tag is pushed. Raise `versionCode` and `versionName` in `app/build.gradle.kts`, commit, then:
+## Installing and updating
 
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
+Download the APK from the [Releases](https://github.com/pgfsim/wiser-local-android/releases)
+page and open it on your phone. Android asks you to allow installs from your
+browser or file manager the first time.
 
-The tag has to match `versionName`. The release gets the signed APK and its SHA-256 checksum.
-
-Every release is signed with the same key, because Android only installs an update signed with the key of the installed version. The key is kept out of the repo. The workflow reads it from four repository secrets: `SIGNING_KEYSTORE_BASE64` (the keystore file, base64-encoded), `SIGNING_STORE_PASSWORD`, `SIGNING_KEY_ALIAS` and `SIGNING_KEY_PASSWORD`.
-
-For a signed release build on your own machine, create a `keystore.properties` file next to `settings.gradle.kts` (it is git-ignored):
-
-```properties
-storeFile=C:/path/to/wiser-local-release.jks
-storePassword=...
-keyAlias=wiser-local
-keyPassword=...
-```
-
-Without it, `./gradlew assembleRelease` builds an unsigned APK.
-
-To check an APK came from this project, compare its signing certificate (`apksigner verify --print-certs wiser-local-vX.Y.Z.apk`) with this SHA-256 fingerprint:
+Every release is signed with the same key. To check an APK came from this
+project, compare its signing certificate
+(`apksigner verify --print-certs wiser-local-vX.Y.Z.apk`) with this SHA-256
+fingerprint:
 
 ```
 46:AB:15:6F:CF:A0:0C:D0:CA:FB:35:D7:0E:0D:A8:6E:69:2A:72:51:D0:6F:4A:50:8F:8F:01:E9:43:30:FE:6E
 ```
 
-`apksigner` prints the same value in lower case without colons: `46ab156fcfa00cd0cafb35d70e0da86e692a7251d06f4a508f8f01e94330fe6e`.
+`apksigner` prints the same value in lower case without colons:
+`46ab156fcfa00cd0cafb35d70e0da86e692a7251d06f4a508f8f01e94330fe6e`. Each
+release also has a `.sha256` file with the APK's checksum.
 
-### Updates in the app
+The app looks for a newer release once a day, and whenever **Settings → Check
+for updates** is tapped. If there is one it offers **Update** or **Later**;
+updating is never required. Before installing, it checks the download against
+the release's checksum and that it is signed with the same key as the installed
+copy. Android then asks you to confirm, and the first time, to allow installs
+from Wiser Local.
 
-The app looks for a newer release on GitHub once a day, and whenever **Settings → Check for updates** is tapped. If there is one it offers **Update** or **Later**; updating is never required. Before handing the download to Android's installer it checks the release's `.sha256` file and that the APK is this app signed with the same key as the installed copy. Android then asks for confirmation as usual, and the first time it asks to allow installs from Wiser Local.
-
-A debug build or one from another key can't update to a release this way: uninstall it and install the release once. To try the updater against a test server, build with `-PupdateApi=http://host:port` (it requests `/repos/pgfsim/wiser-local-android/releases/latest` there).
+A copy you built yourself (or any debug build) is signed with a different key,
+so it can't update to a release: uninstall it and install the release once.
 
 ## How it works
 
@@ -212,9 +205,6 @@ Schedule times are `HHMM` integers (`630` is 06:30). In a heating schedule
 `-200` means off. In an on/off schedule a positive time switches on, a negative
 time switches off, and off at midnight is `-2400`.
 
-The payloads follow [msp1974/wiserheatapiv2](https://github.com/msp1974/wiserheatapiv2),
-the library behind the Home Assistant integration.
-
 The UI is Jetpack Compose with Material 3 (in `app/src/main/java/dev/wiserlocal/app/ui/`).
 Talking to the hub uses only `HttpURLConnection` and `org.json`.
 
@@ -239,10 +229,7 @@ The automation editor uses the hub's limits for conditions, times and actions (`
 ## Wiser account (Insights)
 
 Only Insights (and the experimental remote control below) uses the internet. It signs in to Wiser's cloud the same way the
-official app does: `POST https://api-nl.wiserair.com/Login` with the official
-app's client id in a `Basic` header and `grant_type=password` (or
-`grant_type=refresh_token` to renew), and `POST /api/account/logout` to sign
-out. The password is sent only in that sign-in request and is never stored.
+official app does. The password is sent only in that sign-in request and is never stored.
 The refresh token is kept encrypted with a key in the Android Keystore; the
 access token, valid for an hour, is kept in memory only.
 
@@ -257,29 +244,11 @@ script in the returned page. A change to that page could break it.
 
 Off by default, under **Settings → Wiser account**. When it is on and the hub
 can't be reached on the current network, the app sends the same requests through
-Wiser's cloud, as the official app does away from home:
-
-```
-POST https://api-nl.wiserair.com/api/wcs2/rpc/public_genie/web_action
-Authorization: Bearer <access token>
-Wiser-deviceId: base64("urn:dev:opm:SchneiderElectric-WiserHeat-<hub MAC>")
-
-{"method":"WebMethod_PATCH","urlPath":"/v2/domain/Room/1","body":"{...}"}
-```
-
-The answer is `{"resultCode":200,"body":"<the hub's own answer>"}`. When the
-switch is turned on, the hub's id is looked up as the official app does:
-`GET /api/account/summary` lists the account's sites and devices, and the first
-`ControllerId` starting with `urn:dev:opm:SchneiderElectric-WiserHeat`,
-`urn:dev:opm:SchneiderElectric-AuraConnect` or `urn:dev:cer:SchneiderElectric-WiserHeat`
-is used. If that lookup fails, the id is worked out from the hub's MAC address,
-which only works at home. If the hub can't be reached, the cloud is used for the
-next minute before the direct route is tried again. The Home screen says
-"through Wiser's cloud" when that is how it last loaded. This is undocumented
-and may change.
+Wiser's cloud, as the official app does away from home.
 
 ## Limitations
 
+- \*There is an [experimental setting](#control-away-from-home-experimental) to allow hub and device control through Wiser's servers using your Wiser login, so the hub can be controlled from outside the home network.
 - **Airzone air conditioning isn't supported.** The official app adds an
   Airzone unit only after finding it on the local network with its own
   discovery step, then registers it with the hub (`POST /domain/Airzone`).
@@ -293,24 +262,19 @@ and may change.
 - The first request to the hub is plain HTTP, so the app allows cleartext
   traffic. On HTTPS the hub certificate cannot be verified, so this is no
   protection against someone already on your home network.
-- `targetSdk` is held at 35. Raising it needs the newer local-network permission.
+- `targetSdk` is held at 35 for now. Raising it needs the newer local-network permission.
 - Schedule editing needs firmware with the `/data/v2/` API, and is limited to
   eight changes a day.
-- The hub keeps no history, so there are no graphs. It reports a boiler fuel
-  type setting but not whether the boiler is a combi, system or heat pump.
+- The hub keeps no history, so there are no graphs held on it, only on Wiser servers.
 - "Off" for a room is manual mode with the target set to off, as the hub has
   no separate off mode.
 - Hub discovery, OpenTherm readings and the window detection switch have not
   been tried against a real hub. Neither have room and schedule management,
   adding a device, device lock and identify, or the clock settings; those
   requests are taken from the reference library.
-- A Moment made or changed here can have up to 60 actions, each setting a room
-  or turning the hot water on, off or on for a set time. Room boosts, waits and
-  other device types are left to the official app; a Moment using them can be
-  run, renamed, given another icon or deleted here but not edited.
-- Icons: the hub stores a number (IconId 0 to 75) for each Moment and automation.
-  This app draws its own icon for each one, as vector drawables in
-  `app/src/main/res/drawable/moment_icon_<IconId>.xml`.
-- The time zone offset is assumed to be in minutes from UTC.
+- A Moment made or changed here can have up to 60 actions. Waits and
+  notifications can only be added in the official app (this app keeps them), and
+  a Moment using an action this app doesn't know can be run, renamed, given
+  another icon or deleted here but not edited.
 - Whether a firmware update is pending is not shown, because the hub's data
   does not say so clearly.
