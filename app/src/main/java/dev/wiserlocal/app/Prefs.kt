@@ -47,7 +47,7 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("remoteControl", false)
         set(v) = sp.edit().putBoolean("remoteControl", v).apply()
 
-    /** The hub's id in Wiser's cloud, learned from its MAC address while at home. */
+    /** The hub's id in Wiser's cloud, from the account summary (or its MAC address as a fallback). */
     var hubCloudId: String?
         get() = sp.getString("hubCloudId", null)
         set(v) = sp.edit().putString("hubCloudId", v).apply()

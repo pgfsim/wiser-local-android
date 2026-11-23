@@ -353,22 +353,26 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
             viaCloud = false
             return
         }
-        if (prefs.hubCloudId != null) {
-            prefs.remoteControl = true
-            remoteControl = true
-            return
-        }
-        val hub = WiserHub(prefs.host, prefs.secret) // straight to the hub: the id isn't known yet
-        io.execute {
-            val id = runCatching { hub.fetchMacAddress()?.let(dev.wiserlocal.app.CloudRelay::urnForMac) }
+        val hub = WiserHub(prefs.host, prefs.secret) // straight to the hub, for the fallback below
+        val base = cloudStore.base
+        cloudIo.execute {
+            // Ask Wiser's cloud for the hub's id, as the official app does. If that fails, keep
+            // an id found before, or work it out from the hub's MAC address (only possible at home).
+            val fromCloud = runCatching { dev.wiserlocal.app.CloudRelay.lookUpHubId(base, cloudAccessToken()) }
+            val urn = fromCloud.getOrNull()
+                ?: prefs.hubCloudId
+                ?: runCatching { hub.fetchMacAddress()?.let(dev.wiserlocal.app.CloudRelay::urnForMac) }.getOrNull()
             main.post {
-                val urn = id.getOrNull()
                 if (urn != null) {
                     prefs.hubCloudId = urn
                     prefs.remoteControl = true
                     remoteControl = true
                 } else {
-                    message = "Turn this on at home, while the app can reach the hub, so it can learn the hub's id"
+                    message = if (fromCloud.isSuccess) {
+                        "Wiser's cloud doesn't list a hub on this account"
+                    } else {
+                        "Couldn't find the hub's id. Check the phone is online, or turn this on at home."
+                    }
                 }
             }
         }

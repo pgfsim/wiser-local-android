@@ -220,12 +220,16 @@ Wiser-deviceId: base64("urn:dev:opm:SchneiderElectric-WiserHeat-<hub MAC>")
 {"method":"WebMethod_PATCH","urlPath":"/v2/domain/Room/1","body":"{...}"}
 ```
 
-The answer is `{"resultCode":200,"body":"<the hub's own answer>"}`. The hub's id
-comes from its MAC address, so the switch has to be turned on once at home. If
-the hub can't be reached, the cloud is used for the next minute before the
-direct route is tried again. The Home screen says "through Wiser's cloud" when
-that is how it last loaded. This is undocumented and may change; the network
-details page and Moment or automation details may not come through it.
+The answer is `{"resultCode":200,"body":"<the hub's own answer>"}`. When the
+switch is turned on, the hub's id is looked up as the official app does:
+`GET /api/account/summary` lists the account's sites and devices, and the first
+`ControllerId` starting with `urn:dev:opm:SchneiderElectric-WiserHeat`,
+`urn:dev:opm:SchneiderElectric-AuraConnect` or `urn:dev:cer:SchneiderElectric-WiserHeat`
+is used. If that lookup fails, the id is worked out from the hub's MAC address,
+which only works at home. If the hub can't be reached, the cloud is used for the
+next minute before the direct route is tried again. The Home screen says
+"through Wiser's cloud" when that is how it last loaded. This is undocumented
+and may change.
 
 ## Limitations
 
