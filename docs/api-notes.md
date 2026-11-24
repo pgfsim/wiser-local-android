@@ -129,3 +129,47 @@ musl libc). Static inspection of it confirms and adds a few things:
   (device log and history), `/data/shared/ota/ota-set` (OTA image selection).
   Treat `/newSecret` as destructive — rotating the secret would lock out every
   existing client, this app included.
+
+## Events and MQTT (AsyncAPI)
+
+The hub also publishes an AsyncAPI 2.6 spec ("Wiser Home Async API") describing
+its internal **MQTT bus**, broker `mqtt://mqtt:{port}` (1883 plain / 8883 TLS).
+The broker host is an internal service name, so it's a bus between the hub's own
+services and the cloud bridge — not meant to be the client-facing API. Topics
+are rooted at `WHC/v2/…` (WHC = Wiser Home Controller) and use the same
+`dbPath` addressing as everything else. Three families:
+
+- **`WHC/v2/REQ/{GET|PATCH|POST|DELETE}/{dbPath}`** — request/response. The
+  request must set a `CorrelationData` header and a `responseTopic`; the reply
+  comes back on `{responseTopic}/REQ/{verb}/{path}`. This is the MQTT twin of
+  the `/data` REST calls.
+- **`WHC/v2/CMD/…`** — RPC commands, reply on `{responseTopic}/RSP/…`. Includes
+  `api/cloud/publishEvent` ("opaquely publishes an event to the cloud") — which
+  is exactly the mechanism this app's experimental away-from-home control rides
+  on — plus internal/destructive ones (`cache/NET/call/FactoryReset`,
+  `matter/Join/StartJoin`, `network/AccessPoint/ResetIdleTimeout`,
+  `services/API/MOD/DiscoveryRTU`, `rus/syncFilesystemWithMatrix`).
+- **`WHC/v2/DATA/{dbPath}`** — change events. This is the engine behind the
+  app's live updates: whenever a resource changes the hub publishes a **partial
+  JSON** payload for that path. **Semantics to respect:** it's a patch over the
+  last value, and **a field set to `null` means that field was removed** (not
+  "set to null"). Event roots seen: `domain`, `schedules`, `network`, `cache`,
+  `openTherm`, `weather`, `status`, `services`, `featureflags`,
+  `seasonalComfort`, `matter`, `ocf`, `rus`.
+
+The local HTTP SSE stream the app subscribes to is a bridge of these `DATA`
+events. This app uses each event only as a signal to re-fetch the full state
+(see `HubViewModel`), so it never applies the partial payloads and the
+`null`-means-deleted rule doesn't bite it. The rule only matters if you choose
+to merge the diffs instead of reloading.
+
+Resources that show up here but aren't used by the app yet, and might be worth
+surfacing: **`weather/Forecast/{id}`** (the hub holds a weather forecast, with a
+schema), `status` / `services/Status` (hub health), and `featureflags`. Each
+should be readable over REST at `/data/v2/<path>` (e.g.
+`/data/v2/weather/Forecast`), though that's not yet verified live.
+
+Note the AsyncAPI declares **no security scheme** on the broker. That's expected
+for an internal bus, but it's worth confirming the broker isn't exposed on the
+LAN — i.e. that ports 1883/8883 are closed on the hub's own IP — since a client
+that could publish to `WHC/v2/CMD/…` would be unauthenticated.
