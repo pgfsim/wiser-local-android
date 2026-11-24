@@ -98,3 +98,34 @@ be called remotely on a stock hub: `GET /db` (full raw dump), `System/FactoryRes
 `FactoryReset`, `api/cloud/publishEvent`, Modbus discovery/log, and the Matter
 join internals. Firmware update is separate again — it's a `PATCH /ota` on the
 hub's setup access point (port 8080), not part of either tree above.
+
+## Confirmed from the hub firmware
+
+The hub app is a stripped 32-bit ARM binary (`/usr/bin/lmp/WiserHomeLinux`,
+musl libc). Static inspection of it confirms and adds a few things:
+
+- **The `/db` names come from the embedded database.** The hub uses an embedded
+  C++ JSON database library ("jude"); the Swagger spec describes that database's
+  schema, rooted at `/db`. The live HTTP binding is `/data`. There is no `/db`
+  HTTP route, so the app's own router answers `/db/…` with **502 Bad Gateway**
+  (that string is baked into the binary — the 502 is the hub app itself, not a
+  separate proxy).
+- **Swagger UI is served at `/swagger`** (it pulls the swagger-ui assets from a
+  CDN, so the page needs internet to render, but the spec is generated locally).
+  `GET /swagger` returns the spec. You can pull it off any hub.
+- **The version prefix is optional.** The route pattern is
+  `/data/(v[0-9]+/)?domain/…`, and the hub's own built-in web UI calls
+  `data/domain/…` with no `/v2`. So both `/data/domain/…` and
+  `/data/v2/domain/…` work; `/v2` just pins the schema version.
+- **Reboot, concretely:** `PATCH /data/domain/System` with body
+  `{"RequestReboot": true}` (taken verbatim from the hub's built-in UI).
+- **Moments are created at `/data/Moment`, not `/data/domain/Moment`.** The
+  binary explicitly rejects creation via the domain path
+  ("use /Moment NOT /domain/Moment"). Reads/edits of existing Moments are under
+  `/data/v2/domain/Moment`.
+- **Other endpoints seen in the firmware** (not all verified live, handle with
+  care): `/newSecret` (rotates the hub secret), `/secret` (read it, setup-mode),
+  `/data/private/log/wiser-home.txt` and `/data/private/.wiserhome.history`
+  (device log and history), `/data/shared/ota/ota-set` (OTA image selection).
+  Treat `/newSecret` as destructive — rotating the secret would lock out every
+  existing client, this app included.
